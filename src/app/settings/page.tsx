@@ -1,81 +1,63 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { User, Settings2, Sparkles, Bell, ChevronRight } from "lucide-react";
+import { User, Palette, Bell, ChevronRight, Info } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AppShell } from "@/components/layout/AppShell";
 import { ProfileSection } from "@/components/settings/ProfileSection";
-import { PreferencesSection } from "@/components/settings/PreferencesSection";
-import { AIProviderSection } from "@/components/settings/AIProviderSection";
+import { AppearanceSection } from "@/components/settings/AppearanceSection";
+import { NotificationsSection } from "@/components/settings/NotificationsSection";
 import { Toast, ToastMessage } from "@/components/shared/Toast";
+import { authService } from "@/services/auth.service";
 import { userService } from "@/services/user.service";
 import { UserProfile } from "@/types";
 import { cn } from "@/lib/utils";
 
-type SettingsTab = "profile" | "preferences" | "ai-provider" | "notifications";
+type Tab = "profile" | "appearance" | "notifications" | "about";
 
-const NAV: { id: SettingsTab; label: string; desc: string; icon: React.ElementType }[] = [
-  { id: "profile",      label: "Profile",       desc: "Name, email, organization",       icon: User      },
-  { id: "preferences",  label: "Preferences",   desc: "Behavior & defaults",              icon: Settings2 },
-  { id: "ai-provider",  label: "AI Provider",   desc: "LLM model & explanation level",   icon: Sparkles  },
-  { id: "notifications",label: "Notifications", desc: "Alerts & email settings",          icon: Bell      },
+const NAV: { id: Tab; label: string; desc: string; icon: React.ElementType }[] = [
+  { id: "profile",       label: "Profile",       desc: "Name, email & password",   icon: User    },
+  { id: "appearance",    label: "Appearance",     desc: "Theme & animations",        icon: Palette },
+  { id: "notifications", label: "Notifications",  desc: "Alerts & emails",           icon: Bell    },
+  { id: "about",         label: "About",          desc: "Version & info",            icon: Info    },
 ];
 
-function NotificationsSection() {
-  const [prefs, setPrefs] = useState({ onReview: true, onCritical: true, onReport: false, weeklyDigest: true });
-  const [saved, setSaved] = useState(false);
-
-  const save = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
-
-  const Toggle = ({ k, label, desc }: { k: keyof typeof prefs; label: string; desc: string }) => (
-    <div className="flex items-center justify-between py-4 border-b border-[#1E3025] last:border-0">
-      <div>
-        <p className="text-[13px] font-semibold text-white">{label}</p>
-        <p className="text-[12px] text-[#7E8A84]">{desc}</p>
-      </div>
-      <button
-        onClick={() => setPrefs((p) => ({ ...p, [k]: !p[k] }))}
-        className={cn(
-          "relative inline-flex h-6 w-11 rounded-full transition-colors duration-200",
-          prefs[k] ? "bg-[#2E7D32]" : "bg-[#1E3025]"
-        )}
-        role="switch" aria-checked={prefs[k]}
-      >
-        <span className={cn("absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all duration-200", prefs[k] ? "left-6" : "left-1")} />
-      </button>
-    </div>
-  );
-
+function AboutSection() {
   return (
     <div className="space-y-6 max-w-xl">
       <div>
-        <h2 className="text-[18px] font-bold text-white">Notification Preferences</h2>
-        <p className="text-[13px] text-[#AAB5AF] mt-1">Choose when BugZero notifies you.</p>
+        <h2 className="text-[18px] font-bold text-white">About BugZero</h2>
+        <p className="text-[13px] text-[#AAB5AF] mt-1">Version information and resources.</p>
       </div>
-      <div className="bg-[#101915] border border-[#1E3025] rounded-2xl px-5">
-        <Toggle k="onReview"      label="Review Completed"       desc="Notify when an AI review finishes." />
-        <Toggle k="onCritical"    label="Critical Finding"       desc="Alert immediately on critical severity." />
-        <Toggle k="onReport"      label="Report Exported"        desc="Notify when an audit report is ready." />
-        <Toggle k="weeklyDigest"  label="Weekly Health Digest"   desc="Receive a weekly summary of repository health." />
-      </div>
-      <div className="flex justify-end">
-        <motion.button
-          whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-          onClick={save}
-          className={cn(
-            "flex items-center gap-2 h-10 px-6 rounded-xl text-[13px] font-bold transition-all",
-            saved ? "bg-[#4CAF50] text-white" : "bg-[#2E7D32] hover:bg-[#388E3C] text-white"
-          )}
-        >
-          {saved ? "✓ Saved" : "Save Notifications"}
-        </motion.button>
+      <div className="bg-[#101915] border border-[#1E3025] rounded-2xl divide-y divide-[#1E3025]">
+        {[
+          { label: "Version",         value: "2.1.0"          },
+          { label: "Release Date",    value: "August 2026"    },
+          { label: "License",         value: "MIT"            },
+        ].map((row) => (
+          <div key={row.label} className="flex items-center justify-between px-5 py-4">
+            <span className="text-[13px] text-[#AAB5AF]">{row.label}</span>
+            <span className="text-[13px] font-semibold text-white font-mono">{row.value}</span>
+          </div>
+        ))}
+        <div className="flex items-center justify-between px-5 py-4">
+          <span className="text-[13px] text-[#AAB5AF]">GitHub</span>
+          <a
+            href="https://github.com"
+            target="_blank"
+            rel="noreferrer"
+            className="text-[13px] font-semibold text-[#2E7D32] hover:text-[#4CAF50] transition-colors"
+          >
+            View Repository →
+          </a>
+        </div>
       </div>
     </div>
   );
 }
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+  const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [user, setUser]           = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast]         = useState<ToastMessage | null>(null);
@@ -84,64 +66,66 @@ export default function SettingsPage() {
     userService.getCurrentUser().then((u) => { setUser(u); setIsLoading(false); });
   }, []);
 
-  const handleProfileSave = async (name: string, org: string) => {
-    const u = await userService.updateProfile(name, org);
-    setUser(u);
-    setToast({ id: Date.now().toString(), type: "success", message: "Profile updated." });
+  const showToast = (message: string, type: ToastMessage["type"] = "success") =>
+    setToast({ id: Date.now().toString(), type, message });
+
+  const handleProfileSave = async (updates: { name: string; currentPassword?: string; newPassword?: string }) => {
+    try {
+      if (updates.currentPassword && updates.newPassword) {
+        await authService.changePassword(updates.currentPassword, updates.newPassword);
+      }
+      const updated = await authService.updateProfile({ name: updates.name });
+      setUser(updated);
+      showToast("Profile saved.");
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : "Failed to save profile.", "danger");
+    }
   };
+
   const handlePrefsSave = async (prefs: UserProfile["preferences"]) => {
-    const u = await userService.updatePreferences(prefs);
-    setUser(u);
-    setToast({ id: Date.now().toString(), type: "success", message: "Preferences saved." });
-  };
-  const handleAISave = async (config: UserProfile["aiProvider"]) => {
-    const u = await userService.updateAIProvider(config);
-    setUser(u);
-    setToast({ id: Date.now().toString(), type: "success", message: "AI provider updated." });
+    try {
+      const updated = await authService.updatePreferences(prefs);
+      setUser(updated);
+      showToast("Preferences saved.");
+    } catch {
+      showToast("Failed to save preferences.", "danger");
+    }
   };
 
   return (
     <AppShell>
       <div className="space-y-6">
 
-        {/* ── Identity Hero ── */}
+        {/* Identity hero */}
         {!isLoading && user && (
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
-            className="relative overflow-hidden bg-[#101915] border border-[#1E3025] rounded-2xl p-6"
+            transition={{ duration: 0.35 }}
+            className="relative overflow-hidden bg-[#101915] border border-[#1E3025] rounded-2xl p-5"
           >
-            <div className="absolute top-0 right-0 w-48 h-24 pointer-events-none opacity-[0.06]"
-              style={{ background: "radial-gradient(ellipse, #2E7D32, transparent 70%)", transform: "translate(20%, -30%)" }}
+            <div
+              className="absolute top-0 right-0 w-48 h-24 pointer-events-none opacity-[0.06]"
+              style={{ background: "radial-gradient(ellipse, #2E7D32, transparent 70%)", transform: "translate(20%,-30%)" }}
             />
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              {/* Avatar */}
-              <div className="w-14 h-14 rounded-2xl bg-[#2E7D32]/25 border-2 border-[#2E7D32]/40 flex items-center justify-center text-[#2E7D32] font-bold text-2xl shrink-0 select-none">
-                {user.name.charAt(0)}
+              <div className="w-12 h-12 rounded-2xl bg-[#2E7D32]/25 border-2 border-[#2E7D32]/40 flex items-center justify-center text-[#2E7D32] font-bold text-xl shrink-0 select-none">
+                {user.name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-[18px] font-bold text-white">{user.name}</h2>
+                <p className="text-[16px] font-bold text-white">{user.name}</p>
                 <p className="text-[12px] text-[#7E8A84]">{user.email}</p>
-                {user.organization && (
-                  <p className="text-[11px] text-[#AAB5AF] mt-0.5">{user.organization}</p>
-                )}
               </div>
-              <div className="flex items-center gap-3">
-                <div className="px-3 py-1.5 bg-[#2E7D32]/15 border border-[#2E7D32]/30 rounded-xl text-[11px] font-mono text-[#4CAF50]">
-                  {user.aiProvider.provider} · {user.aiProvider.model}
-                </div>
-                <div className="px-3 py-1.5 bg-[#0B120F] border border-[#1E3025] rounded-xl text-[11px] font-mono text-[#7E8A84]">
-                  v2.1.0-prod
-                </div>
+              <div className="px-3 py-1.5 bg-[#0B120F] border border-[#1E3025] rounded-xl text-[10px] font-mono text-[#7E8A84] shrink-0">
+                v2.1.0
               </div>
             </div>
           </motion.div>
         )}
 
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* ── Settings Nav ── */}
-          <aside className="lg:w-60 shrink-0 space-y-1">
+        <div className="flex flex-col lg:flex-row gap-5">
+          {/* Settings nav */}
+          <aside className="lg:w-56 shrink-0 space-y-0.5">
             {NAV.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -150,40 +134,42 @@ export default function SettingsPage() {
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
                   className={cn(
-                    "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all group relative",
+                    "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all relative",
                     isActive
                       ? "bg-[#101915] border border-[#1E3025] text-white"
                       : "text-[#AAB5AF] hover:bg-[#0B120F] hover:text-white"
                   )}
                 >
-                  {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#2E7D32] rounded-r-full" />}
-                  <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-[#2E7D32]" : "text-[#7E8A84] group-hover:text-[#AAB5AF]")} />
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-[#2E7D32] rounded-r-full" />
+                  )}
+                  <Icon className={cn("w-4 h-4 shrink-0", isActive ? "text-[#2E7D32]" : "text-[#7E8A84]")} />
                   <div className="flex-1 min-w-0">
                     <p className={cn("text-[13px]", isActive ? "font-bold" : "font-medium")}>{item.label}</p>
                     <p className="text-[11px] text-[#7E8A84] truncate">{item.desc}</p>
                   </div>
-                  <ChevronRight className={cn("w-3.5 h-3.5 shrink-0 transition-colors", isActive ? "text-[#7E8A84]" : "text-transparent group-hover:text-[#7E8A84]")} />
+                  <ChevronRight className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-[#7E8A84]" : "text-transparent")} />
                 </button>
               );
             })}
           </aside>
 
-          {/* ── Settings Content ── */}
+          {/* Content panel */}
           <div className="flex-1 min-w-0 bg-[#101915] border border-[#1E3025] rounded-2xl p-6">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeTab}
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
-                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 0.2 }}
               >
                 {!isLoading && user && (
                   <>
-                    {activeTab === "profile"       && <ProfileSection user={user} onSave={handleProfileSave} />}
-                    {activeTab === "preferences"   && <PreferencesSection preferences={user.preferences} onSave={handlePrefsSave} />}
-                    {activeTab === "ai-provider"   && <AIProviderSection aiProvider={user.aiProvider} onSave={handleAISave} />}
-                    {activeTab === "notifications" && <NotificationsSection />}
+                    {activeTab === "profile"       && <ProfileSection       user={user}                    onSave={handleProfileSave}                     />}
+                    {activeTab === "appearance"    && <AppearanceSection    preferences={user.preferences} onSave={handlePrefsSave}                        />}
+                    {activeTab === "notifications" && <NotificationsSection preferences={user.preferences} onSave={handlePrefsSave}                        />}
+                    {activeTab === "about"         && <AboutSection />}
                   </>
                 )}
               </motion.div>

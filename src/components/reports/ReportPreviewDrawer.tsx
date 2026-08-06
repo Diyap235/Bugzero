@@ -4,7 +4,7 @@ import React from "react";
 import { Report } from "@/types";
 import { Drawer } from "../shared/Drawer";
 import { Button } from "../shared/Button";
-import { Download, ShieldCheck, FileText, CheckCircle } from "lucide-react";
+import { Download, FileText, CheckCircle2, BarChart3, ShieldCheck } from "lucide-react";
 import { formatBytes } from "@/lib/utils";
 
 interface ReportPreviewDrawerProps {
@@ -20,6 +20,10 @@ export const ReportPreviewDrawer: React.FC<ReportPreviewDrawerProps> = ({
 }) => {
   if (!report) return null;
 
+  const healthColor =
+    report.healthScore >= 80 ? "text-success" :
+    report.healthScore >= 60 ? "text-warning" : "text-danger";
+
   return (
     <Drawer
       isOpen={isOpen}
@@ -27,44 +31,75 @@ export const ReportPreviewDrawer: React.FC<ReportPreviewDrawerProps> = ({
       title={
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
-          <span>{report.reportName}</span>
+          <span className="truncate">{report.reportName}</span>
         </div>
       }
-      subtitle={`Repository: ${report.repositoryName} • Format: ${report.format}`}
+      subtitle={`${report.repositoryName} · ${report.format} · ${formatBytes(report.sizeBytes)}`}
       footer={
         <Button
           variant="primary"
           leftIcon={<Download className="w-4 h-4" />}
-          onClick={() => alert(`Downloading ${report.reportName}...`)}
+          onClick={() => alert(`Downloading ${report.reportName}…`)}
         >
-          Download Report ({formatBytes(report.sizeBytes)})
+          Download ({formatBytes(report.sizeBytes)})
         </Button>
       }
     >
       <div className="space-y-6">
-        {/* Report Overview Header */}
-        <div className="bg-card p-4 border border-border rounded-lg space-y-2">
-          <span className="text-xs font-semibold text-text-muted uppercase">Audit Summary</span>
-          <div className="flex items-center justify-between">
-            <span className="text-2xl font-bold font-mono text-success">{report.healthScore}% Overall Health</span>
-            <span className="text-xs text-text-secondary">Generated {report.reviewDate}</span>
+        {/* Health summary */}
+        <div className="bg-card p-5 border border-border rounded-xl space-y-3">
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Review Summary</p>
+          <div className="flex items-end justify-between">
+            <div>
+              <span className={`text-3xl font-bold font-mono ${healthColor}`}>
+                {report.healthScore}%
+              </span>
+              <span className="text-sm text-text-muted ml-2">overall health</span>
+            </div>
+            <span className="text-xs text-text-muted">Generated {report.reviewDate}</span>
+          </div>
+          <div className="h-2 bg-surface rounded-full overflow-hidden border border-border">
+            <div
+              className={`h-full rounded-full transition-all ${
+                report.healthScore >= 80 ? "bg-success" :
+                report.healthScore >= 60 ? "bg-warning" : "bg-danger"
+              }`}
+              style={{ width: `${report.healthScore}%` }}
+            />
           </div>
         </div>
 
-        {/* Audit Details */}
-        <div className="space-y-3 text-xs">
-          <h4 className="font-semibold text-text-muted uppercase tracking-wider">Report Contents</h4>
-          <div className="bg-surface p-4 border border-border rounded-lg space-y-2 text-text-secondary">
-            <div className="flex items-center gap-2 text-text-primary font-medium">
-              <CheckCircle className="w-4 h-4 text-success" /> Static Analysis Results (Bandit & Pylint)
-            </div>
-            <div className="flex items-center gap-2 text-text-primary font-medium">
-              <CheckCircle className="w-4 h-4 text-success" /> CodeBERT ML Confidence Classifications
-            </div>
-            <div className="flex items-center gap-2 text-text-primary font-medium">
-              <CheckCircle className="w-4 h-4 text-success" /> Explainable AI Root Causes & Code Diffs
-            </div>
+        {/* Report contents */}
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Report Contents</p>
+          <div className="bg-surface border border-border rounded-xl divide-y divide-border">
+            {[
+              { icon: ShieldCheck, label: "Security findings with severity ratings"        },
+              { icon: BarChart3,   label: "Code quality analysis and metrics"              },
+              { icon: CheckCircle2,label: "Suggested fixes with before/after code diffs"  },
+              { icon: CheckCircle2,label: "Repository health trend data"                  },
+            ].map(({ icon: Icon, label }) => (
+              <div key={label} className="flex items-center gap-3 px-4 py-3 text-sm text-text-secondary">
+                <Icon className="w-4 h-4 text-success shrink-0" />
+                {label}
+              </div>
+            ))}
           </div>
+        </div>
+
+        {/* Meta */}
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          {[
+            { label: "Repository",    val: report.repositoryName },
+            { label: "Format",        val: report.format         },
+            { label: "Generated",     val: report.reviewDate     },
+            { label: "File Size",     val: formatBytes(report.sizeBytes) },
+          ].map((m) => (
+            <div key={m.label} className="bg-card border border-border rounded-xl p-3">
+              <p className="text-text-muted mb-0.5">{m.label}</p>
+              <p className="font-semibold text-text-primary font-mono">{m.val}</p>
+            </div>
+          ))}
         </div>
       </div>
     </Drawer>

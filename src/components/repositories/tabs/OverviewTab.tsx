@@ -86,7 +86,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           <Play className="w-4 h-4" /> Run AI Review
         </motion.button>
         <div className="flex items-center gap-6 text-[11px] text-[#7E8A84]">
-          {["Pylint + Bandit", "CodeBERT ML", "GPT-4o / Claude"].map((t) => (
+          {["Static Analysis", "ML Classification", "Root-Cause Diffs"].map((t) => (
             <span key={t} className="flex items-center gap-1"><CheckCircle2 className="w-3 h-3 text-[#2E7D32]" />{t}</span>
           ))}
         </div>

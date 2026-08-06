@@ -156,9 +156,9 @@ export const HealthTab: React.FC<HealthTabProps> = ({ repoId, isLoading: parentL
   if (!healthData) return null;
 
   const scoreCards = [
-    { label: "Overall Health",    val: healthData.overallHealth,  icon: TrendingUp, color: "text-[#4CAF50]", bg: "border-[#4CAF50]/20 bg-[#4CAF50]/5",  bar: "bg-[#4CAF50]",  desc: "+12% this month" },
-    { label: "Pylint Quality",    val: healthData.qualityScore,   icon: BarChart3,  color: "text-[#3B82F6]", bg: "border-[#3B82F6]/20 bg-[#3B82F6]/5",  bar: "bg-[#3B82F6]",  desc: "Code quality score" },
-    { label: "Bandit Security",   val: healthData.securityScore,  icon: Shield,     color: "text-[#F59E0B]", bg: "border-[#F59E0B]/20 bg-[#F59E0B]/5",  bar: "bg-[#F59E0B]",  desc: "Security posture" },
+    { label: "Overall Health",  val: healthData.overallHealth,  icon: TrendingUp, color: "text-[#4CAF50]", bg: "border-[#4CAF50]/20 bg-[#4CAF50]/5",  bar: "bg-[#4CAF50]",  desc: "+12% this month"   },
+    { label: "Code Quality",    val: healthData.qualityScore,   icon: BarChart3,  color: "text-[#3B82F6]", bg: "border-[#3B82F6]/20 bg-[#3B82F6]/5",  bar: "bg-[#3B82F6]",  desc: "Quality score"     },
+    { label: "Security Score",  val: healthData.securityScore,  icon: Shield,     color: "text-[#F59E0B]", bg: "border-[#F59E0B]/20 bg-[#F59E0B]/5",  bar: "bg-[#F59E0B]",  desc: "Security posture"  },
   ];
 
   return (

@@ -23,25 +23,34 @@ export const FindingDrawer: React.FC<FindingDrawerProps> = ({
   onClose,
   onUpdateStatus,
 }) => {
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [copiedExplanation, setCopiedExplanation] = useState(false);
+  const [isUpdating, setIsUpdating]           = useState(false);
+  const [copiedExplanation, setCopied]        = useState(false);
 
   if (!finding) return null;
 
   const handleResolve = async () => {
     setIsUpdating(true);
-    try {
-      await onUpdateStatus(finding.id, "resolved");
-    } finally {
-      setIsUpdating(false);
-    }
+    try { await onUpdateStatus(finding.id, "resolved"); }
+    finally { setIsUpdating(false); }
   };
 
-  const handleCopyExplanation = () => {
-    const text = `Title: ${finding.title}\nFile: ${finding.file}:${finding.line}\n\nProblem:\n${finding.aiExplanation.problem}\n\nWhy it matters:\n${finding.aiExplanation.whyItMatters}\n\nBest Practice:\n${finding.aiExplanation.bestPractice}`;
+  const handleCopy = () => {
+    const text = [
+      `Title: ${finding.title}`,
+      `File: ${finding.file}:${finding.line}`,
+      ``,
+      `Problem:`,
+      finding.aiExplanation.problem,
+      ``,
+      `Why it matters:`,
+      finding.aiExplanation.whyItMatters,
+      ``,
+      `Best practice:`,
+      finding.aiExplanation.bestPractice,
+    ].join("\n");
     navigator.clipboard.writeText(text);
-    setCopiedExplanation(true);
-    setTimeout(() => setCopiedExplanation(false), 2000);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -60,10 +69,10 @@ export const FindingDrawer: React.FC<FindingDrawerProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleCopyExplanation}
+            onClick={handleCopy}
             leftIcon={copiedExplanation ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
           >
-            {copiedExplanation ? "Copied" : "Copy AI Explanation"}
+            {copiedExplanation ? "Copied" : "Copy Summary"}
           </Button>
           {finding.status !== "resolved" ? (
             <Button
@@ -73,7 +82,7 @@ export const FindingDrawer: React.FC<FindingDrawerProps> = ({
               onClick={handleResolve}
               leftIcon={<Check className="w-4 h-4" />}
             >
-              Resolve Finding
+              Mark Resolved
             </Button>
           ) : (
             <span className="text-xs font-semibold text-success flex items-center gap-1">
@@ -89,18 +98,19 @@ export const FindingDrawer: React.FC<FindingDrawerProps> = ({
         <p className="text-xs text-text-secondary leading-relaxed">{finding.summary}</p>
       </div>
 
-      {/* 2. Evidence (MUST appear before AI explanation per Bible rule) */}
+      {/* 2. Evidence — always before explanation */}
       <div className="space-y-3 border-b border-border pb-6">
         <div className="flex items-center justify-between text-xs font-semibold text-text-muted uppercase tracking-wider">
           <span className="flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-primary" /> Static Analysis Evidence
+            <ShieldCheck className="w-4 h-4 text-primary" /> Analysis Evidence
           </span>
           <span className="px-2 py-0.5 bg-card border border-border rounded text-[10px] font-mono text-primary">
-            Source: {finding.evidence.staticAnalysisSource}
+            {finding.evidence.staticAnalysisSource}
           </span>
         </div>
         <div className="text-xs text-text-secondary font-mono">
-          File: <span className="text-text-primary font-semibold">{finding.file}</span> ({finding.evidence.lineNumbers})
+          <span className="text-text-primary font-semibold">{finding.file}</span>{" "}
+          ({finding.evidence.lineNumbers})
         </div>
         <CodeBlock code={finding.evidence.codeSnippet} filename={finding.file} />
       </div>
@@ -108,30 +118,27 @@ export const FindingDrawer: React.FC<FindingDrawerProps> = ({
       {/* 3. AI Explanation */}
       <div className="space-y-4 border-b border-border pb-6">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-primary uppercase tracking-wider">
-          <Sparkles className="w-4 h-4 text-primary animate-pulse" /> CodeBERT + LLM XAI Analysis
+          <Sparkles className="w-4 h-4 animate-pulse" /> BugZero Analysis
         </div>
-
         <div className="bg-card p-4 border border-border rounded-lg space-y-3 text-xs">
           <div>
-            <span className="text-text-muted font-semibold block mb-0.5">Problem Root Cause:</span>
+            <span className="text-text-muted font-semibold block mb-0.5">Root Cause</span>
             <p className="text-text-primary leading-relaxed">{finding.aiExplanation.problem}</p>
           </div>
-
           <div>
-            <span className="text-text-muted font-semibold block mb-0.5">Why It Matters:</span>
+            <span className="text-text-muted font-semibold block mb-0.5">Why It Matters</span>
             <p className="text-text-secondary leading-relaxed">{finding.aiExplanation.whyItMatters}</p>
           </div>
-
           <div>
-            <span className="text-text-muted font-semibold block mb-0.5">Engineering Best Practice:</span>
+            <span className="text-text-muted font-semibold block mb-0.5">Best Practice</span>
             <p className="text-text-secondary leading-relaxed">{finding.aiExplanation.bestPractice}</p>
           </div>
         </div>
       </div>
 
-      {/* 4. Suggested Fix & Code Diff */}
+      {/* 4. Suggested Fix */}
       <div className="space-y-3 border-b border-border pb-6">
-        <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Suggested Fix & Patch Diff</h4>
+        <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Suggested Fix</h4>
         <p className="text-xs text-text-secondary">{finding.suggestedFix.explanation}</p>
         <DiffViewer original={finding.diff.original} modified={finding.diff.modified} />
       </div>
@@ -139,18 +146,18 @@ export const FindingDrawer: React.FC<FindingDrawerProps> = ({
       {/* 5. References */}
       {finding.references.length > 0 && (
         <div className="space-y-2">
-          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider">Security & Quality References</h4>
+          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider">References</h4>
           <ul className="space-y-1 text-xs">
-            {finding.references.map((refUrl, idx) => (
+            {finding.references.map((url, idx) => (
               <li key={idx}>
                 <a
-                  href={refUrl}
+                  href={url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline font-mono inline-flex items-center gap-1 truncate max-w-full"
                 >
                   <ExternalLink className="w-3 h-3 shrink-0" />
-                  <span className="truncate">{refUrl}</span>
+                  <span className="truncate">{url}</span>
                 </a>
               </li>
             ))}

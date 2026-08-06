@@ -529,7 +529,7 @@ export default function LandingPage() {
         <div className="max-w-[1440px] mx-auto px-6 md:px-10">
           <div className="flex flex-wrap items-center justify-center gap-2 mb-5">
             <span className="text-[11px] font-semibold text-[#7E8A84] uppercase tracking-widest">
-              Engineered with production-grade infrastructure
+              Built for production engineering teams
             </span>
           </div>
           <motion.div
@@ -539,11 +539,11 @@ export default function LandingPage() {
             viewport={{ once: true }}
             className="flex flex-wrap items-center justify-center gap-3"
           >
-            {["Python 3.11","FastAPI","CodeBERT","OpenAI / Claude","Docker","GitHub Actions","PostgreSQL","Pylint + Bandit"].map((t) => (
+            {["Security Analysis","Risk Scoring","Code Quality","Health Tracking","Audit Reports","Code Diffs","Finding Management","Repository Overview"].map((t) => (
               <motion.span
                 key={t}
                 variants={fadeUp}
-                className="px-4 py-2 bg-[#101915] border border-[#1E3025] rounded-xl text-[12px] font-mono text-[#AAB5AF] hover:border-[#2E7D32]/50 hover:text-white transition-colors"
+                className="px-4 py-2 bg-[#101915] border border-[#1E3025] rounded-xl text-[12px] text-[#AAB5AF] hover:border-[#2E7D32]/50 hover:text-white transition-colors"
               >
                 {t}
               </motion.span>

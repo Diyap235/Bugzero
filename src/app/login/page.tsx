@@ -5,26 +5,26 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ShieldCheck, Mail, Lock, User as UserIcon, Github, Chrome,
-  ArrowRight, Sparkles, Shield, Cpu, TrendingUp, CheckCircle2,
+  ArrowRight, Sparkles, Shield, TrendingUp, CheckCircle2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/shared/Input";
 import { authService } from "@/services/auth.service";
 
-// Simulated "AI scanning" code lines
+// Analysis steps shown in the left panel — no internal tool names
 const SCAN_LINES = [
-  { text: "▸ Initialising Pylint static analyser…",   delay: 0,    color: "text-[#7E8A84]"  },
-  { text: "▸ Running Bandit security scan…",           delay: 400,  color: "text-[#7E8A84]"  },
-  { text: "  [B608] SQL Injection — user_repo.py:48",  delay: 900,  color: "text-[#EF4444]"  },
-  { text: "  [B105] Hardcoded token — config.py:19",   delay: 1300, color: "text-[#F59E0B]"  },
-  { text: "▸ Loading CodeBERT classifier…",            delay: 1700, color: "text-[#7E8A84]"  },
-  { text: "  Confidence: 96% (SQL Injection)",         delay: 2100, color: "text-[#4CAF50]"  },
-  { text: "  Confidence: 91% (Hardcoded Secret)",      delay: 2400, color: "text-[#4CAF50]"  },
-  { text: "▸ Generating AI root-cause analysis…",      delay: 2800, color: "text-[#2E7D32]"  },
-  { text: "  ✓ Patch diff generated for B608",         delay: 3300, color: "text-[#4CAF50]"  },
-  { text: "  ✓ Patch diff generated for B105",         delay: 3600, color: "text-[#4CAF50]"  },
-  { text: "▸ Repository health score: 84/100",         delay: 4000, color: "text-[#AAB5AF]"  },
-  { text: "  ✓ Analysis complete in 1.4s",             delay: 4400, color: "text-[#4CAF50]"  },
+  { text: "▸ Scanning repository structure…",           delay: 0,    color: "text-[#7E8A84]" },
+  { text: "▸ Running security analysis…",               delay: 400,  color: "text-[#7E8A84]" },
+  { text: "  [CRITICAL] SQL injection — user_repo.py:48", delay: 900,  color: "text-[#EF4444]" },
+  { text: "  [HIGH] Hardcoded secret — config.py:19",   delay: 1300, color: "text-[#F59E0B]" },
+  { text: "▸ Classifying findings…",                    delay: 1700, color: "text-[#7E8A84]" },
+  { text: "  Confidence: 96% (SQL Injection)",          delay: 2100, color: "text-[#4CAF50]" },
+  { text: "  Confidence: 91% (Hardcoded Secret)",       delay: 2400, color: "text-[#4CAF50]" },
+  { text: "▸ Generating root-cause explanations…",      delay: 2800, color: "text-[#2E7D32]" },
+  { text: "  ✓ Suggested fix ready for finding 1",      delay: 3300, color: "text-[#4CAF50]" },
+  { text: "  ✓ Suggested fix ready for finding 2",      delay: 3600, color: "text-[#4CAF50]" },
+  { text: "▸ Repository health score: 84/100",          delay: 4000, color: "text-[#AAB5AF]" },
+  { text: "  ✓ Analysis complete in 1.4s",              delay: 4400, color: "text-[#4CAF50]" },
 ];
 
 function ScannerPanel() {
@@ -63,7 +63,7 @@ function ScannerPanel() {
           <span className="text-[#2E7D32]">the way engineers do.</span>
         </h2>
         <p className="text-[14px] text-[#AAB5AF] leading-relaxed max-w-xs">
-          Evidence-first static analysis, CodeBERT ML scoring, and explainable root-cause diffs — all in under 2 seconds.
+          Evidence-first analysis, intelligent risk scoring, and actionable code fixes — all in under 2 seconds.
         </p>
       </div>
 
@@ -101,12 +101,12 @@ function ScannerPanel() {
         )}
       </div>
 
-      {/* Trust pills */}
+      {/* Trust pills — no internal tool names */}
       <div className="flex flex-wrap gap-2 mt-6">
         {[
-          { icon: Shield,  label: "Bandit + Pylint" },
-          { icon: Cpu,     label: "CodeBERT ML"     },
-          { icon: Sparkles,label: "GPT-4o / Claude" },
+          { icon: Shield,   label: "Security Analysis" },
+          { icon: Sparkles, label: "Risk Scoring"      },
+          { icon: TrendingUp, label: "Health Tracking" },
         ].map(({ icon: Icon, label }) => (
           <div key={label} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0B120F] border border-[#1E3025] text-[11px] text-[#AAB5AF]">
             <Icon className="w-3 h-3 text-[#2E7D32]" />
@@ -140,8 +140,8 @@ export default function AuthPage() {
       else await authService.register(name || "Developer", email, password);
       setIsDone(true);
       setTimeout(() => router.push("/repositories"), 800);
-    } catch {
-      setError("Authentication failed. Please check your credentials.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Authentication failed.");
     } finally {
       setIsLoading(false);
     }

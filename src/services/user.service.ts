@@ -1,35 +1,22 @@
-import { MOCK_USER } from "@/lib/mock-data";
-import { UserProfile, UserPreferences, AIProviderConfig } from "@/types";
+/**
+ * user.service — reads current user from auth-store (localStorage).
+ * All mutations go through authService so session stays in sync.
+ */
+import { authStore } from "@/lib/auth-store";
+import { UserProfile, DEFAULT_PREFERENCES } from "@/types";
 
-let user = { ...MOCK_USER };
+const FALLBACK: UserProfile = {
+  id: "user-1",
+  name: "Alex Vance",
+  email: "alex.vance@engineering.io",
+  avatarUrl: "",
+  preferences: { ...DEFAULT_PREFERENCES },
+};
 
 export const userService = {
   getCurrentUser: async (): Promise<UserProfile> => {
-    await new Promise((res) => setTimeout(res, 200));
-    return user;
-  },
-
-  updateProfile: async (name: string, organization?: string): Promise<UserProfile> => {
-    await new Promise((res) => setTimeout(res, 400));
-    user = { ...user, name, organization };
-    return user;
-  },
-
-  updatePreferences: async (preferences: Partial<UserPreferences>): Promise<UserProfile> => {
-    await new Promise((res) => setTimeout(res, 300));
-    user = {
-      ...user,
-      preferences: { ...user.preferences, ...preferences },
-    };
-    return user;
-  },
-
-  updateAIProvider: async (aiProvider: Partial<AIProviderConfig>): Promise<UserProfile> => {
-    await new Promise((res) => setTimeout(res, 350));
-    user = {
-      ...user,
-      aiProvider: { ...user.aiProvider, ...aiProvider },
-    };
-    return user;
+    await new Promise((res) => setTimeout(res, 100));
+    const persisted = authStore.getUser();
+    return persisted ?? FALLBACK;
   },
 };

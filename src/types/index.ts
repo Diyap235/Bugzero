@@ -15,7 +15,7 @@ export interface Finding {
   line: number;
   evidence: {
     codeSnippet: string;
-    staticAnalysisSource: "Pylint" | "Bandit" | "CodeBERT";
+    staticAnalysisSource: string;
     lineNumbers: string;
   };
   aiExplanation: {
@@ -41,7 +41,7 @@ export interface Repository {
   name: string;
   description: string;
   primaryLanguage: string;
-  healthScore: number; // 0 - 100
+  healthScore: number;
   openFindingsCount: number;
   criticalFindingsCount: number;
   lastReviewDate: string;
@@ -109,17 +109,14 @@ export interface Report {
   downloadUrl: string;
 }
 
+/** Real preferences — every field has a working implementation */
 export interface UserPreferences {
-  defaultExplanationLevel: "Basic" | "Detailed" | "Deep";
-  autoOpenDrawer: boolean;
-  defaultReportFormat: "PDF" | "JSON";
-  enableKeyboardShortcuts: boolean;
-}
-
-export interface AIProviderConfig {
-  provider: "OpenAI" | "Claude";
-  model: string;
-  explanationLevel: "Basic" | "Detailed" | "Deep";
+  theme: "dark"; // only dark supported; extensible
+  accentColor: "green" | "blue" | "purple" | "orange";
+  animationsEnabled: boolean;
+  browserNotifications: boolean;
+  notifyOnReview: boolean;
+  notifyOnCritical: boolean;
 }
 
 export interface UserProfile {
@@ -127,7 +124,14 @@ export interface UserProfile {
   name: string;
   email: string;
   avatarUrl: string;
-  organization?: string;
   preferences: UserPreferences;
-  aiProvider: AIProviderConfig;
 }
+
+export const DEFAULT_PREFERENCES: UserPreferences = {
+  theme: "dark",
+  accentColor: "green",
+  animationsEnabled: true,
+  browserNotifications: false,
+  notifyOnReview: true,
+  notifyOnCritical: true,
+};
