@@ -1,0 +1,9 @@
+# raw PyVul download (22 MB), the notebook downloads it again
+training/pyvul/
+
+# CodeBERT embeddings from Step 2 (recomputed by the notebook)
+*.npy
+
+# Python
+__pycache__/
+.ipynb_checkpoints/
