@@ -1,0 +1,32 @@
+{
+  "name": "@bugzero/workers",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./analysis-queue": "./src/jobs/analysis-queue.ts",
+    "./github-provider": "./src/providers/github-provider.ts",
+    "./analysis-processor": "./src/jobs/process-analysis-job.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "start": "node --import tsx src/worker.ts"
+  },
+  "dependencies": {
+    "@bugzero/contracts": "workspace:*",
+    "@bugzero/config": "workspace:*",
+    "@bugzero/database": "workspace:*",
+    "bullmq": "^5.0.0",
+    "ioredis": "^5.0.0",
+    "typescript": "^5"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "eslint": "^8",
+    "tsx": "^4.20.3",
+    "typescript": "^5"
+  }
+}

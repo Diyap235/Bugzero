@@ -11,6 +11,7 @@ import {
 import {
   motion, useScroll, useTransform, useInView, AnimatePresence,
 } from "framer-motion";
+import { sampleWorkspace } from "@/domains/product/sample-data";
 
 // ─── Animation helpers ────────────────────────────────────────────────────────
 const fadeUp = {
@@ -48,33 +49,28 @@ function FadeIn({
 }
 
 // ─── VS Code Workspace Mock ───────────────────────────────────────────────────
-const CODE_LINES = [
-  { n: 1,  text: "from app.db import get_connection",         type: "import" },
-  { n: 2,  text: "from app.models import User",              type: "import" },
-  { n: 3,  text: "",                                          type: "blank" },
-  { n: 4,  text: "def get_user_by_email(email: str):",       type: "def" },
-  { n: 5,  text: '    """Fetch user record by email."""',    type: "doc" },
-  { n: 6,  text: "    conn = get_connection()",              type: "code" },
-  { n: 7,  text: "    cursor = conn.cursor()",               type: "code" },
-  { n: 8,  text: "    # CRITICAL: SQL Injection (B608)",     type: "critical-comment" },
-  { n: 9,  text: `    query = f"SELECT * FROM users`,         type: "danger" },
-  { n: 10, text: `      WHERE email = '{email}'"`,            type: "danger" },
-  { n: 11, text: "    cursor.execute(query)",                 type: "danger" },
-  { n: 12, text: "    return cursor.fetchone()",              type: "code" },
-];
+const CODE_LINES = sampleWorkspace.codeLines;
+const sampleSqlFinding = sampleWorkspace.findings[0];
+const sampleSqlDetail = sampleSqlFinding ? sampleWorkspace.findingDetails[sampleSqlFinding.finding.id] : undefined;
+const sampleSqlEvidence = sampleSqlDetail?.evidence;
+const sampleSourceFile = sampleSqlFinding?.occurrence?.filePath ?? "users.ts";
+const sampleSourceName = sampleSourceFile.split("/").at(-1) ?? "users.ts";
+const landingData = {
+  overview: sampleWorkspace.overview,
+  findings: sampleWorkspace.findings,
+  healthHistory: sampleWorkspace.healthHistory,
+};
 
 const LINE_COLORS: Record<string, string> = {
   import: "text-info",
   def: "text-primary",
-  doc: "text-text-muted",
   code: "text-text-secondary",
-  "critical-comment": "text-danger font-bold",
   danger: "text-danger/90",
   blank: "",
 };
 
 function VSCodeWorkspace() {
-  const [visibleLines, setVisibleLines] = useState(0);
+  const visibleLines = CODE_LINES.length;
   const [findingVisible, setFindingVisible] = useState(false);
   const [panelVisible, setPanelVisible] = useState(false);
   const ref = useRef(null);
@@ -82,17 +78,12 @@ function VSCodeWorkspace() {
 
   useEffect(() => {
     if (!inView) return;
-    let i = 0;
-    const interval = setInterval(() => {
-      i++;
-      setVisibleLines(i);
-      if (i === CODE_LINES.length) {
-        clearInterval(interval);
-        setTimeout(() => setFindingVisible(true), 300);
-        setTimeout(() => setPanelVisible(true), 700);
-      }
-    }, 90);
-    return () => clearInterval(interval);
+    const findingTimer = setTimeout(() => setFindingVisible(true), 300);
+    const panelTimer = setTimeout(() => setPanelVisible(true), 700);
+    return () => {
+      clearTimeout(findingTimer);
+      clearTimeout(panelTimer);
+    };
   }, [inView]);
 
   return (
@@ -111,7 +102,7 @@ function VSCodeWorkspace() {
           <span className="w-3 h-3 rounded-full bg-[#F59E0B]/70" />
           <span className="w-3 h-3 rounded-full bg-[#4CAF50]/70" />
         </div>
-        <span className="text-[11px] text-[#7E8A84] font-mono">BugZero — auth-service-python</span>
+        <span className="text-[11px] text-[#7E8A84] font-mono">BugZero — {sampleWorkspace.repository.fullName} · illustrative sample</span>
         <div className="flex items-center gap-1 text-[#7E8A84]">
           <Minus className="w-3 h-3" /><Square className="w-3 h-3" />
         </div>
@@ -131,7 +122,7 @@ function VSCodeWorkspace() {
             Explorer
           </div>
           {[
-            { name: "auth-service", children: ["user_repo.py", "config.py", "auth.py"] },
+            { name: sampleWorkspace.repository.fullName, children: [sampleSourceName] },
           ].map((folder) => (
             <div key={folder.name}>
               <div className="flex items-center gap-1 text-[11px] text-[#AAB5AF] px-1 py-0.5">
@@ -142,7 +133,7 @@ function VSCodeWorkspace() {
                 <div
                   key={f}
                   className={`flex items-center gap-1 text-[11px] px-3 py-0.5 rounded cursor-pointer ${
-                    f === "user_repo.py"
+                    f === sampleSourceName
                       ? "bg-[#1E3025] text-white font-medium"
                       : "text-[#7E8A84] hover:text-[#AAB5AF]"
                   }`}
@@ -159,7 +150,7 @@ function VSCodeWorkspace() {
         <div className="flex-1 flex flex-col min-w-0">
           {/* Tabs */}
           <div className="flex items-center border-b border-[#1E3025] bg-[#050705]">
-            {["user_repo.py", "config.py"].map((tab, i) => (
+            {[sampleSourceName].map((tab, i) => (
               <div
                 key={tab}
                 className={`flex items-center gap-1.5 px-3 py-2 text-[11px] border-r border-[#1E3025] ${
@@ -186,7 +177,7 @@ function VSCodeWorkspace() {
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.15 }}
                 className={`flex items-start gap-3 ${
-                  (line.type === "danger" || line.type === "critical-comment") && findingVisible
+                  line.type === "danger" && findingVisible
                     ? "bg-[#EF4444]/10 rounded"
                     : ""
                 }`}
@@ -206,12 +197,12 @@ function VSCodeWorkspace() {
             <div className="text-[#7E8A84] flex items-center gap-2">
               <Terminal className="w-3 h-3" />
               <span className="text-[#2E7D32] font-bold">BugZero</span>
-              <span className="text-[#7E8A84]">▸ Bandit B608: SQL injection detected — line 9 (confidence: HIGH)</span>
+              <span className="text-[#7E8A84]">▸ Sample finding: {sampleSqlFinding?.finding.ruleId} · {sampleSourceFile}:{sampleSqlFinding?.occurrence?.startLine}</span>
             </div>
           </div>
         </div>
 
-        {/* Right AI Panel */}
+        {/* Evidence panel */}
         <AnimatePresence>
           {panelVisible && (
             <motion.div
@@ -222,24 +213,17 @@ function VSCodeWorkspace() {
               style={{ width: 176 }}
             >
               <div className="text-[10px] text-[#2E7D32] font-bold uppercase tracking-widest mb-2 flex items-center gap-1">
-                <Sparkles className="w-3 h-3" /> AI Review
+                <ShieldCheck className="w-3 h-3" /> Evidence graph
               </div>
               <div className="space-y-2">
-                <div className="bg-[#EF4444]/15 border border-[#EF4444]/30 rounded p-2 text-[10px]">
-                  <div className="text-[#EF4444] font-bold">CRITICAL</div>
-                  <div className="text-[#AAB5AF] mt-0.5">SQL Injection</div>
-                  <div className="text-[#7E8A84] mt-0.5 font-mono">AI 96%</div>
-                </div>
-                <div className="bg-[#F59E0B]/10 border border-[#F59E0B]/20 rounded p-2 text-[10px]">
-                  <div className="text-[#F59E0B] font-bold">HIGH</div>
-                  <div className="text-[#AAB5AF] mt-0.5">Hardcoded key</div>
-                  <div className="text-[#7E8A84] mt-0.5 font-mono">AI 91%</div>
-                </div>
+                {sampleSqlEvidence?.nodes.map((node) => (
+                  <div key={node.node_key} className="rounded border border-[#1E3025] bg-[#101915] p-2 text-[10px] text-[#AAB5AF]">{node.label}</div>
+                ))}
                 <div className="mt-2 pt-2 border-t border-[#1E3025] text-[10px] text-[#7E8A84]">
                   Health
-                  <div className="text-[#4CAF50] font-bold font-mono text-base">84%</div>
+                  <div className="text-[#4CAF50] font-bold font-mono text-base">{sampleWorkspace.overview.latestHealth?.overall_score ?? "Unknown"} / 100</div>
                   <div className="w-full bg-[#1E3025] h-1.5 rounded-full mt-1">
-                    <div className="bg-[#4CAF50] h-full rounded-full" style={{ width: "84%" }} />
+                    <div className="bg-[#4CAF50] h-full rounded-full" style={{ width: `${sampleWorkspace.overview.latestHealth?.overall_score ?? 0}%` }} />
                   </div>
                 </div>
               </div>
@@ -260,17 +244,17 @@ function VSCodeWorkspace() {
           >
             <div className="flex items-center gap-1.5 text-[#EF4444] text-[11px] font-bold mb-1">
               <AlertTriangle className="w-3.5 h-3.5" />
-              SQL Injection (Bandit B608)
+              {sampleSqlFinding?.finding.currentSeverity} · {sampleSqlFinding?.finding.ruleId.replaceAll("_", " ")}
             </div>
             <div className="text-[10px] text-[#AAB5AF]">
-              String interpolation into raw SQL. Use parameterized queries.
+              Sample flow: request input reaches a dynamically constructed SQL query.
             </div>
             <div className="mt-1.5 font-mono text-[10px] space-y-0.5">
               <div className="text-[#EF4444] bg-[#EF4444]/10 px-1.5 py-0.5 rounded">
-                - f&quot;...WHERE email = &#39;{"{email}"}&#39;&quot;
+                {sampleSqlEvidence?.snapshot.authority}
               </div>
               <div className="text-[#4CAF50] bg-[#4CAF50]/10 px-1.5 py-0.5 rounded">
-                + &quot;...WHERE email = %s&quot;, (email,)
+                {sampleSqlEvidence?.snapshot.sufficiency} · {sampleSqlEvidence?.snapshot.completeness}
               </div>
             </div>
           </motion.div>
@@ -363,6 +347,15 @@ export default function LandingPage() {
   const { scrollY } = useScroll();
   const navBg = useTransform(scrollY, [0, 80], ["rgba(5,7,5,0)", "rgba(11,18,15,0.97)"]);
   const navBorder = useTransform(scrollY, [0, 80], ["rgba(30,48,37,0)", "rgba(30,48,37,1)"]);
+  const health = landingData.overview.latestHealth;
+  const score = health?.overall_score ?? "Unknown";
+  const securityScore = health?.security_score ?? "Unknown";
+  const qualityScore = health?.quality_score ?? "Unknown";
+  const counts = landingData.overview.findingCounts;
+  const coverageValue = health?.dimensions?.quality?.inputMetrics?.coveragePercent;
+  const coverage = typeof coverageValue === "number" ? `${coverageValue}%` : "Unknown";
+  const recentFindings = landingData.findings.slice(0, 3);
+  const healthTrend = landingData.healthHistory.map(({ snapshot }) => snapshot.overall_score ?? 0).reverse();
 
   return (
     <div className="min-h-screen bg-[#050705] text-white overflow-x-hidden">
@@ -408,15 +401,15 @@ export default function LandingPage() {
 
           <div className="flex items-center gap-3">
             <Link href="/login" className="hidden sm:inline-flex items-center h-9 px-4 text-sm font-medium text-[#AAB5AF] hover:text-white transition-colors rounded-xl">
-              Sign In
+              Sign in
             </Link>
-            <Link href="/repositories">
+            <Link href="/login">
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
                 className="flex items-center gap-2 h-9 px-5 bg-[#2E7D32] hover:bg-[#388E3C] text-white text-sm font-semibold rounded-xl transition-colors"
               >
-                Start Reviewing <ArrowRight className="w-3.5 h-3.5" />
+                Enter BugZero <ArrowRight className="w-3.5 h-3.5" />
               </motion.button>
             </Link>
           </div>
@@ -440,7 +433,10 @@ export default function LandingPage() {
             <motion.div variants={fadeUp}>
               <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[12px] font-semibold bg-[#2E7D32]/15 text-[#4CAF50] border border-[#2E7D32]/35">
                 <Sparkles className="w-3.5 h-3.5" />
-                Explainable AI · Evidence-First · CodeBERT + Pylint + Bandit
+                Evidence-first · Repository intelligence · Deterministic risk
+              </span>
+              <span className="ml-3 text-[11px] text-[#7E8A84]">
+                Sample repository
               </span>
             </motion.div>
 
@@ -449,37 +445,35 @@ export default function LandingPage() {
               variants={fadeUp}
               className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.05] text-white"
             >
-              Ship Safer Code<br />
-              with{" "}
-              <span className="text-[#2E7D32]">Explainable AI</span>{" "}
-              Reviews
+              Understand your code.<br />
+              Investigate with{" "}
+              <span className="text-[#2E7D32]">confidence.</span>
             </motion.h1>
 
             {/* Subtitle */}
             <motion.p variants={fadeUp} className="text-[16px] text-[#AAB5AF] leading-relaxed max-w-[480px]">
-              Transform source code into actionable engineering decisions. Powered by static analysis,
-              CodeBERT ML classification, and root-cause patch diffs — with full evidence before AI speaks.
+              Understand your repository, investigate findings, and track code health with evidence, risk, and analysis history in one place.
             </motion.p>
 
             {/* CTAs */}
             <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-4">
-              <Link href="/repositories">
+              <Link href="/login">
                 <motion.button
                   whileHover={{ scale: 1.03, boxShadow: "0 0 32px rgba(46,125,50,0.35)" }}
                   whileTap={{ scale: 0.97 }}
                   className="flex items-center gap-2.5 h-14 px-8 bg-[#2E7D32] hover:bg-[#388E3C] text-white text-[15px] font-bold rounded-xl transition-all"
                 >
                   <Play className="w-4 h-4" />
-                  Start Reviewing
+                  Enter the workspace
                 </motion.button>
               </Link>
-              <Link href="/repositories/repo-1">
+              <Link href="/login">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
                   className="flex items-center gap-2.5 h-14 px-8 border border-[#1E3025] hover:border-[#294134] hover:bg-[#16211B] text-white text-[15px] font-semibold rounded-xl transition-all"
                 >
-                  View Live Demo
+                  Investigate a finding
                 </motion.button>
               </Link>
             </motion.div>
@@ -487,8 +481,8 @@ export default function LandingPage() {
             {/* Trust indicators */}
             <motion.div variants={fadeUp} className="flex flex-wrap items-center gap-5 pt-2 text-[13px] text-[#7E8A84]">
               {[
-                { icon: ShieldCheck, text: "Evidence-first analysis" },
-                { icon: Cpu, text: "CodeBERT ML scoring" },
+                { icon: ShieldCheck, text: "Evidence graph" },
+                { icon: Cpu, text: "Deterministic risk" },
                 { icon: TrendingUp, text: "Repository health tracking" },
               ].map(({ icon: Icon, text }) => (
                 <div key={text} className="flex items-center gap-1.5">
@@ -529,7 +523,7 @@ export default function LandingPage() {
         <div className="max-w-[1440px] mx-auto px-6 md:px-10">
           <div className="flex flex-wrap items-center justify-center gap-2 mb-5">
             <span className="text-[11px] font-semibold text-[#7E8A84] uppercase tracking-widest">
-              Built for production engineering teams
+              Explore BugZero
             </span>
           </div>
           <motion.div
@@ -539,7 +533,7 @@ export default function LandingPage() {
             viewport={{ once: true }}
             className="flex flex-wrap items-center justify-center gap-3"
           >
-            {["Security Analysis","Risk Scoring","Code Quality","Health Tracking","Audit Reports","Code Diffs","Finding Management","Repository Overview"].map((t) => (
+            {["Security Analysis","Technical Risk","Code Quality","Health Tracking","Finding Evidence","Analysis History","Finding Management","Repository Overview"].map((t) => (
               <motion.span
                 key={t}
                 variants={fadeUp}
@@ -552,18 +546,83 @@ export default function LandingPage() {
         </div>
       </Section>
 
+      <Section id="overview" className="border-b border-[#1E3025] bg-[#0B120F] py-16 px-6 md:px-10">
+        <div className="mx-auto max-w-[1440px] space-y-8">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-[#2E7D32]">Repository Intelligence</p>
+              <h2 className="mt-2 text-3xl font-bold">Overview</h2>
+              <p className="mt-2 text-sm text-[#AAB5AF]">
+                {landingData.overview.repository.fullName} · {landingData.overview.repository.defaultBranch}
+                {" · Sample data"}
+              </p>
+              <p className="mt-1 text-xs text-[#7E8A84]">
+                Languages: {sampleWorkspace.repository.languages.join(" · ")}
+              </p>
+            </div>
+            <Link href="/login" className="text-sm font-semibold text-[#4CAF50] hover:text-white">Manage repositories <ArrowRight className="ml-1 inline h-4 w-4" /></Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            {[
+              { label: "Repository health", value: score, suffix: score === "Unknown" ? "" : " / 100", color: "text-[#4CAF50]" },
+              { label: "Open findings", value: counts.open, suffix: "", color: "text-white" },
+              { label: "Critical / high-risk findings", value: `${counts.critical} / ${counts.highRisk}`, suffix: "", color: "text-[#EF4444]" },
+              { label: "Security", value: securityScore, suffix: securityScore === "Unknown" ? "" : " / 100", color: "text-[#F59E0B]" },
+              { label: "Quality", value: qualityScore, suffix: qualityScore === "Unknown" ? "" : " / 100", color: "text-[#3B82F6]" },
+              { label: "Coverage", value: coverage, suffix: "", color: "text-white" },
+              { label: "Analysis status", value: landingData.overview.latestRun?.status ?? "Not analyzed", suffix: "", color: "text-[#4CAF50]" },
+            ].map((metric) => (
+              <div key={metric.label} className="rounded-2xl border border-[#1E3025] bg-[#101915] p-4">
+                <p className="text-[11px] text-[#7E8A84]">{metric.label}</p>
+                <p className={`mt-2 text-xl font-bold font-mono ${metric.color}`}>{metric.value}{metric.suffix}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-2xl border border-[#1E3025] bg-[#101915] p-5">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="font-bold">Recent findings</h3>
+                <Link href="/login" className="text-xs text-[#4CAF50] hover:text-white">View all</Link>
+              </div>
+              <div className="space-y-2">
+                {recentFindings.map(({ finding, occurrence }) => (
+                  <Link key={finding.id} href="/login" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#1E3025] bg-[#0B120F] p-3 hover:border-[#2E7D32]/50">
+                    <span className="flex items-center gap-3">
+                      <span className="text-[10px] font-bold uppercase text-[#EF4444]">{finding.currentSeverity}</span>
+                      <span className="text-sm font-semibold text-white">{finding.ruleId.replaceAll("_", " ")}</span>
+                    </span>
+                    <span className="text-[11px] font-mono text-[#7E8A84]">{occurrence?.filePath ?? "Location unavailable"}{typeof occurrence?.startLine === "number" ? `:${occurrence.startLine}` : ""}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-[#1E3025] bg-[#101915] p-5">
+              <h3 className="font-bold">Recent analysis</h3>
+              <p className="mt-2 text-sm text-[#AAB5AF]">Status: {landingData.overview.latestRun?.status ?? "Not analyzed"}</p>
+              <p className="mt-1 text-xs text-[#7E8A84]">Latest repository health trend</p>
+              <div className="mt-4 flex h-14 items-end gap-2">
+                {sampleWorkspace.healthHistory.map(({ snapshot }) => snapshot.overall_score ?? 0).reverse().map((value, index) => (
+                  <div key={`${index}-${value}`} title={`${value} / 100`} className="flex-1 rounded-t bg-[#2E7D32]/70" style={{ height: `${Math.max(value, 4)}%` }} />
+                ))}
+              </div>
+              <Link href="/login" className="mt-4 inline-block text-xs text-[#4CAF50] hover:text-white">Explore repository health <ArrowRight className="ml-1 inline h-3 w-3" /></Link>
+            </div>
+          </div>
+        </div>
+      </Section>
+
       {/* ════════════════════════════════════════════════
-          PROBLEM SECTION — alternating split layout
+          BUGZERO WORKSPACE — product concepts
       ════════════════════════════════════════════════ */}
       <Section className="py-28 px-6 md:px-10">
         <div className="max-w-[1440px] mx-auto space-y-16">
           <FadeIn className="text-center space-y-4 max-w-2xl mx-auto">
-            <p className="text-[12px] font-semibold text-[#2E7D32] uppercase tracking-widest">The Problem</p>
+            <p className="text-[12px] font-semibold text-[#2E7D32] uppercase tracking-widest">Repository Intelligence</p>
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
-              Code reviews are slow.<br />Bugs found later cost more.
+              Context for every investigation.
             </h2>
             <p className="text-[15px] text-[#AAB5AF]">
-              Traditional manual reviews miss subtle security bugs and leave teams with inconsistent quality standards.
+              Connect the repository, analysis, findings, evidence, risk, and health in one BugZero workspace.
             </p>
           </FadeIn>
 
@@ -571,23 +630,23 @@ export default function LandingPage() {
             {[
               {
                 icon: Lock, color: "text-[#EF4444]", glow: "bg-[#EF4444]/5 border-[#EF4444]/20",
-                title: "Hidden Security Vulnerabilities",
-                body: "Raw SQL injections, unhashed passwords, and hardcoded API tokens bypass surface-level human reviews entirely.",
+                title: "Repository context",
+                body: "Start with a repository, branch, and the analysis history associated with its code.",
               },
               {
                 icon: Zap, color: "text-[#F59E0B]", glow: "bg-[#F59E0B]/5 border-[#F59E0B]/20",
-                title: "Inconsistent Quality Standards",
-                body: "Every reviewer evaluates code differently, leading to code rot, technical debt, and unmaintainable modules.",
+                title: "Analysis status",
+                body: "Follow analysis as it progresses through the stages available to the repository.",
               },
               {
                 icon: Code2, color: "text-[#3B82F6]", glow: "bg-[#3B82F6]/5 border-[#3B82F6]/20",
-                title: "Black-Box AI Hallucinations",
-                body: "Generic LLM chatbots suggest fixes without static analysis evidence or ML confidence scoring behind them.",
+                title: "Unified code signals",
+                body: "Repository findings, evidence, risk, and health are easier to investigate when they share one workspace.",
               },
               {
                 icon: BarChart3, color: "text-[#2E7D32]", glow: "bg-[#2E7D32]/5 border-[#2E7D32]/20",
-                title: "No Repository Health Metrics",
-                body: "Teams lack longitudinal visibility into code quality, security trends, and weak module hotspots over time.",
+                title: "Health over time",
+                body: "Review assessed dimensions and recorded health snapshots without inventing unknown metrics.",
               },
             ].map((card, i) => {
               const Icon = card.icon;
@@ -612,15 +671,15 @@ export default function LandingPage() {
       </Section>
 
       {/* ════════════════════════════════════════════════
-          AI PIPELINE — connected horizontal flow
+          ANALYSIS PIPELINE — connected horizontal flow
       ════════════════════════════════════════════════ */}
       <Section id="pipeline" className="py-28 px-6 md:px-10 bg-[#0B120F] border-y border-[#1E3025]">
         <div className="max-w-[1440px] mx-auto space-y-16">
           <FadeIn className="text-center space-y-4">
-            <p className="text-[12px] font-semibold text-[#2E7D32] uppercase tracking-widest">Evidence Before AI</p>
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">The BugZero AI Review Pipeline</h2>
+            <p className="text-[12px] font-semibold text-[#2E7D32] uppercase tracking-widest">From repository to insight</p>
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">The BugZero analysis pipeline</h2>
             <p className="text-[15px] text-[#AAB5AF] max-w-xl mx-auto">
-              Static analysis runs before AI — every finding is backed by machine-verifiable evidence, not guesswork.
+              Follow repository analysis through parsing, intelligence, findings, evidence, risk, and health.
             </p>
           </FadeIn>
 
@@ -636,11 +695,11 @@ export default function LandingPage() {
               className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 relative"
             >
               {[
-                { step: "01", title: "Repository Upload", desc: "Source file or archive ingestion up to 50MB", icon: FolderOpen, color: "text-[#3B82F6]" },
-                { step: "02", title: "Static Analysis", desc: "Pylint quality scan + Bandit security scan", icon: Shield, color: "text-[#F59E0B]" },
-                { step: "03", title: "CodeBERT ML", desc: "Semantic classification with 0–100% confidence", icon: Cpu, color: "text-[#2E7D32]" },
-                { step: "04", title: "Explainable AI", desc: "LLM root-cause analysis and patch generation", icon: Sparkles, color: "text-[#AAB5AF]" },
-                { step: "05", title: "Actionable Report", desc: "Code diffs, health trends, PDF/JSON export", icon: FileCheck, color: "text-[#4CAF50]" },
+                { step: "01", title: "Queued", desc: "Repository analysis enters the workspace.", icon: FolderOpen, color: "text-[#3B82F6]" },
+                { step: "02", title: "Parsing", desc: "Source files are parsed into code representations.", icon: Code2, color: "text-[#F59E0B]" },
+                { step: "03", title: "Repository Intelligence", desc: "Code entities and relationships provide analysis context.", icon: Cpu, color: "text-[#2E7D32]" },
+                { step: "04", title: "Findings & Evidence", desc: "Analyzers report findings with supporting evidence.", icon: ShieldCheck, color: "text-[#AAB5AF]" },
+                { step: "05", title: "Risk & Health", desc: "Review risk assessments and repository health.", icon: FileCheck, color: "text-[#4CAF50]" },
               ].map((p, i) => {
                 const Icon = p.icon;
                 return (
@@ -690,15 +749,15 @@ export default function LandingPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-[11px] font-semibold text-[#7E8A84] uppercase tracking-wider mb-1">Repository Health</p>
-                    <h3 className="text-lg font-bold">auth-service-python</h3>
+                    <h3 className="text-lg font-bold">{landingData.overview.repository.fullName}</h3>
                   </div>
                   <span className="px-3 py-1 bg-[#4CAF50]/15 border border-[#4CAF50]/30 text-[#4CAF50] text-[12px] font-mono font-bold rounded-full">
-                    84 / 100
+                    {score}{score === "Unknown" ? "" : " / 100"}
                   </span>
                 </div>
                 {/* Inline mini chart */}
                 <div className="flex items-end gap-1 h-16">
-                  {[72, 75, 79, 81, 83, 84].map((v, i) => (
+                  {(healthTrend.length ? healthTrend : [0]).map((v, i) => (
                     <motion.div
                       key={i}
                       initial={{ height: 0 }}
@@ -710,10 +769,16 @@ export default function LandingPage() {
                   ))}
                 </div>
                 <div className="flex justify-between text-[10px] text-[#7E8A84] font-mono">
-                  {["Jul 5","Jul 12","Jul 19","Jul 26","Aug 2","Aug 3"].map((d) => <span key={d}>{d}</span>)}
+                  {landingData.healthHistory.slice().reverse().map(({ snapshot }) => (
+                    <span key={snapshot.id}>{new Date(snapshot.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                  ))}
                 </div>
                 <div className="grid grid-cols-3 gap-3 pt-2 border-t border-[#1E3025]">
-                  {[["Pylint Quality","88%","text-[#3B82F6]"],["Bandit Security","78%","text-[#F59E0B]"],["Open Findings","4","text-[#EF4444]"]].map(([l,v,c]) => (
+                  {[
+                    ["Quality", qualityScore, "text-[#3B82F6]"],
+                    ["Security", securityScore, "text-[#F59E0B]"],
+                    ["Open Findings", String(counts.open), "text-[#EF4444]"],
+                  ].map(([l,v,c]) => (
                     <div key={l} className="bg-[#0B120F] rounded-xl p-3">
                       <span className="text-[10px] text-[#7E8A84] block">{l}</span>
                       <span className={`text-lg font-bold font-mono ${c}`}>{v}</span>
@@ -723,48 +788,48 @@ export default function LandingPage() {
               </motion.div>
             </FadeIn>
 
-            {/* Tall: AI Finding Card */}
+            {/* Tall: finding card */}
             <FadeIn delay={0.1}>
               <motion.div
                 whileHover={{ y: -3 }}
                 className="bg-[#101915] border border-[#EF4444]/25 rounded-2xl p-5 space-y-4 hover:border-[#EF4444]/50 transition-colors h-full"
               >
                 <div className="flex items-center gap-2">
-                  <span className="px-2.5 py-1 bg-[#EF4444]/15 border border-[#EF4444]/30 text-[#EF4444] text-[11px] font-bold rounded-full uppercase">Critical</span>
-                  <span className="text-[11px] font-mono text-[#7E8A84]">AI 96%</span>
+                  <span className="px-2.5 py-1 bg-[#EF4444]/15 border border-[#EF4444]/30 text-[#EF4444] text-[11px] font-bold rounded-full uppercase">{recentFindings[0]?.finding.currentSeverity ?? "Finding"}</span>
+                  <span className="text-[11px] font-mono text-[#7E8A84]">Confidence {recentFindings[0]?.finding.currentConfidence ?? "Unknown"}</span>
                 </div>
                 <div>
-                  <h4 className="text-[14px] font-bold">SQL Injection Risk</h4>
-                  <p className="text-[11px] text-[#7E8A84] font-mono mt-1">user_repo.py:48 · Bandit B608</p>
+                  <h4 className="text-[14px] font-bold">{recentFindings[0]?.finding.ruleId.replaceAll("_", " ") ?? "No findings"}</h4>
+                  <p className="text-[11px] text-[#7E8A84] font-mono mt-1">
+                    {recentFindings[0]?.occurrence?.filePath ?? "Location unavailable"}
+                    {typeof recentFindings[0]?.occurrence?.startLine === "number" ? `:${recentFindings[0].occurrence.startLine}` : ""}
+                  </p>
                 </div>
                 <div className="bg-[#050705] rounded-xl p-3 font-mono text-[11px] space-y-1 border border-[#1E3025]">
-                  <div className="text-[#EF4444]/90 bg-[#EF4444]/10 px-2 py-1 rounded">
-                    - f&quot;...WHERE email=&apos;{"{email}"}&apos;&quot;
-                  </div>
-                  <div className="text-[#4CAF50] bg-[#4CAF50]/10 px-2 py-1 rounded">
-                    + &quot;...WHERE email=%s&quot;, (email,)
+                  <div className="text-[#AAB5AF] px-2 py-1 rounded">
+                    Technical risk: {recentFindings[0]?.finding.currentRisk ?? "Unknown"}
                   </div>
                 </div>
                 <div className="bg-[#0B120F] border border-[#1E3025] rounded-xl p-3 text-[11px] text-[#AAB5AF] space-y-1">
-                  <p className="font-semibold text-white text-[12px]">Root Cause</p>
-                  <p>String interpolation into raw SQL allows malicious actors to inject arbitrary queries (CWE-89).</p>
+                  <p className="font-semibold text-white text-[12px]">Investigation</p>
+                  <p>Open the finding to review its status, source location, evidence, and risk assessment.</p>
                 </div>
                 <div className="pt-2">
                   <div className="w-full bg-[#0B120F] rounded-full h-1.5 border border-[#1E3025]">
                     <motion.div
                       initial={{ width: 0 }}
-                      whileInView={{ width: "96%" }}
+                      whileInView={{ width: `${recentFindings[0]?.finding.currentRisk ?? 0}%` }}
                       viewport={{ once: true }}
                       transition={{ duration: 0.7, ease: "easeOut" }}
                       className="bg-[#EF4444] h-full rounded-full"
                     />
                   </div>
-                  <p className="text-[10px] text-[#7E8A84] mt-1 font-mono">CodeBERT confidence: 96%</p>
+                  <p className="text-[10px] text-[#7E8A84] mt-1 font-mono">Technical risk · {recentFindings[0]?.finding.currentRisk ?? "Unknown"}</p>
                 </div>
               </motion.div>
             </FadeIn>
 
-            {/* Wide: Code diff viewer */}
+            {/* Wide: sample code viewer */}
             <FadeIn className="md:col-span-2" delay={0.15}>
               <motion.div
                 whileHover={{ y: -3 }}
@@ -773,74 +838,45 @@ export default function LandingPage() {
                 <div className="px-5 py-3 bg-[#0B120F] border-b border-[#1E3025] flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[12px] font-semibold text-[#AAB5AF]">
                     <FileCode2 className="w-3.5 h-3.5 text-[#2E7D32]" />
-                    Suggested Fix — app/core/config.py
+                    Sample code flow — {sampleSourceFile}
                   </div>
                   <div className="flex items-center gap-3 text-[11px]">
-                    <span className="text-[#EF4444]">- 1 line</span>
-                    <span className="text-[#4CAF50]">+ 4 lines</span>
+                    <span className="text-[#7E8A84]">Illustrative sample</span>
                   </div>
                 </div>
                 <div className="p-5 font-mono text-[12px] space-y-1.5">
-                  {[
-                    { t: "remove", c: '- JWT_SECRET_KEY = "super_secret_production_key_12345!"' },
-                    { t: "add",    c: "+ import os" },
-                    { t: "add",    c: '+ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")' },
-                    { t: "add",    c: "+ if not JWT_SECRET_KEY:" },
-                    { t: "add",    c: '+     raise ValueError("JWT_SECRET_KEY is missing")' },
-                    { t: "neutral",c: "  " },
-                    { t: "neutral",c: "  # Always load secrets from environment variables or" },
-                    { t: "neutral",c: "  # a secure vault (e.g., AWS Secrets Manager)" },
-                  ].map((l, i) => (
+                  {sampleWorkspace.codeLines.map((line, index) => (
                     <motion.div
-                      key={i}
+                      key={line.n}
                       initial={{ opacity: 0 }}
                       whileInView={{ opacity: 1 }}
                       viewport={{ once: true }}
-                      transition={{ delay: i * 0.06, duration: 0.25 }}
-                      className={`px-3 py-0.5 rounded ${
-                        l.t === "remove" ? "bg-[#EF4444]/10 text-[#EF4444]" :
-                        l.t === "add" ? "bg-[#4CAF50]/10 text-[#4CAF50]" :
-                        "text-[#7E8A84]"
-                      }`}
+                      transition={{ delay: index * 0.06, duration: 0.25 }}
+                      className={`px-3 py-0.5 rounded ${line.type === "danger" ? "bg-[#EF4444]/10 text-[#EF4444]" : "text-[#AAB5AF]"}`}
                     >
-                      {l.c}
+                      {line.text}
                     </motion.div>
                   ))}
                 </div>
               </motion.div>
             </FadeIn>
 
-            {/* Small: Weak modules */}
+            {/* Small: latest analysis */}
             <FadeIn delay={0.2}>
               <motion.div
                 whileHover={{ y: -3 }}
                 className="bg-[#101915] border border-[#1E3025] rounded-2xl p-5 space-y-4 hover:border-[#294134] transition-colors h-full"
               >
-                <p className="text-[11px] font-semibold text-[#7E8A84] uppercase tracking-wider">Weak Modules</p>
-                <div className="space-y-3">
-                  {[
-                    { file: "user_repo.py", health: 62, risk: "High" },
-                    { file: "config.py", health: 74, risk: "Medium" },
-                    { file: "error_handler.py", health: 81, risk: "Medium" },
-                  ].map((m) => (
-                    <div key={m.file} className="space-y-1">
-                      <div className="flex items-center justify-between text-[12px]">
-                        <span className="font-mono text-[#AAB5AF] truncate">{m.file}</span>
-                        <span className={`font-mono font-bold ${m.health < 70 ? "text-[#EF4444]" : "text-[#F59E0B]"}`}>
-                          {m.health}%
-                        </span>
-                      </div>
-                      <div className="w-full bg-[#0B120F] rounded-full h-1.5">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          whileInView={{ width: `${m.health}%` }}
-                          viewport={{ once: true }}
-                          transition={{ duration: 0.6, ease: "easeOut" }}
-                          className={`h-full rounded-full ${m.health < 70 ? "bg-[#EF4444]" : "bg-[#F59E0B]"}`}
-                        />
-                      </div>
-                    </div>
-                  ))}
+                <p className="text-[11px] font-semibold text-[#7E8A84] uppercase tracking-wider">Latest analysis</p>
+                <div className="space-y-4">
+                  <div className="text-sm font-semibold text-white">{landingData.overview.latestRun?.status ?? "Not analyzed"}</div>
+                  <div className="rounded-xl border border-[#1E3025] bg-[#0B120F] p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-[#7E8A84]">Repository</p>
+                    <p className="mt-1 truncate font-mono text-xs text-[#AAB5AF]">{landingData.overview.repository.fullName}</p>
+                    <p className="mt-2 text-[10px] uppercase tracking-wider text-[#7E8A84]">Branch</p>
+                    <p className="mt-1 font-mono text-xs text-[#AAB5AF]">{landingData.overview.repository.defaultBranch}</p>
+                  </div>
+                  <Link href="/login" className="inline-block text-xs text-[#4CAF50] hover:text-white">View analysis history <ArrowRight className="ml-1 inline h-3 w-3" /></Link>
                 </div>
               </motion.div>
             </FadeIn>
@@ -869,23 +905,23 @@ export default function LandingPage() {
           >
             {[
               { icon: ShieldCheck, color: "text-[#2E7D32]", bg: "bg-[#2E7D32]/10 border-[#2E7D32]/20",
-                title: "Static Analysis First",
-                body: "Pylint and Bandit always run before AI speaks — every finding has machine-verifiable evidence attached." },
-              { icon: Sparkles, color: "text-[#AAB5AF]", bg: "bg-[#AAB5AF]/5 border-[#AAB5AF]/15",
-                title: "CodeBERT ML Scoring",
-                body: "Fine-tuned CodeBERT assigns 0–100% confidence scores, eliminating vague AI guesses." },
+                title: "Security Findings",
+                body: "Review analyzer findings with severity, confidence, technical risk, and source locations." },
+              { icon: GitBranch, color: "text-[#AAB5AF]", bg: "bg-[#AAB5AF]/5 border-[#AAB5AF]/15",
+                title: "Evidence Graphs",
+                body: "Trace supported source-to-sink paths and inspect evidence authority, completeness, and sufficiency." },
               { icon: Code2, color: "text-[#3B82F6]", bg: "bg-[#3B82F6]/10 border-[#3B82F6]/20",
-                title: "Actionable Code Diffs",
-                body: "Interactive patch previews with before/after context, ready to copy straight into your IDE." },
+                title: "Repository Intelligence",
+                body: "Explore parsed code entities and relationships that provide context for analysis." },
               { icon: BarChart3, color: "text-[#4CAF50]", bg: "bg-[#4CAF50]/10 border-[#4CAF50]/20",
-                title: "Repository Health Score",
-                body: "Track quality, security, and technical debt trends over every review with longitudinal charts." },
+                title: "Repository Health",
+                body: "Review assessed health dimensions and their available history; unassessed dimensions remain unknown." },
               { icon: FileCheck, color: "text-[#F59E0B]", bg: "bg-[#F59E0B]/10 border-[#F59E0B]/20",
-                title: "Exportable Audit Reports",
-                body: "Download professional PDF and JSON review summaries for compliance, handoffs, and audits." },
+                title: "Analysis History",
+                body: "Track analysis status and findings associated with repository commits." },
               { icon: Lock, color: "text-[#EF4444]", bg: "bg-[#EF4444]/10 border-[#EF4444]/20",
-                title: "Zero Data Retraining",
-                body: "Your source code is analyzed securely and never used to retrain any ML models." },
+                title: "Evidence-led Risk",
+                body: "Inspect technical risk assessments alongside the evidence and confidence available for a finding." },
             ].map((f) => {
               const Icon = f.icon;
               return (
@@ -914,15 +950,15 @@ export default function LandingPage() {
         <div className="max-w-[1440px] mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
             {[
-              { value: 96, suffix: "%", label: "Max AI Confidence Score", color: "text-[#EF4444]" },
-              { value: 14, suffix: "s", label: "Avg time to first finding", color: "text-[#2E7D32]" },
-              { value: 5, suffix: " tools", label: "Analysis engines combined", color: "text-[#3B82F6]" },
-              { value: 100, suffix: "%", label: "Evidence before AI", color: "text-[#F59E0B]" },
+              { value: String(counts.open), label: "Open findings", color: "text-[#EF4444]" },
+              { value: `${counts.critical} / ${counts.highRisk}`, label: "Critical / high-risk findings", color: "text-[#F59E0B]" },
+              { value: String(score), label: "Repository health / 100", color: "text-[#4CAF50]" },
+              { value: String(coverage), label: "Coverage", color: "text-[#3B82F6]" },
             ].map((stat) => (
               <FadeIn key={stat.label}>
                 <div className="bg-[#101915] border border-[#1E3025] rounded-2xl p-6 text-center">
                   <p className={`text-4xl font-bold font-mono ${stat.color}`}>
-                    <Counter to={stat.value} suffix={stat.suffix} />
+                    {stat.value}
                   </p>
                   <p className="text-[12px] text-[#7E8A84] mt-2 leading-snug">{stat.label}</p>
                 </div>
@@ -939,7 +975,7 @@ export default function LandingPage() {
         <div className="max-w-[1440px] mx-auto space-y-16">
           <FadeIn className="text-center space-y-4">
             <p className="text-[12px] font-semibold text-[#2E7D32] uppercase tracking-widest">How It Works</p>
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">From upload to actionable findings in seconds</h2>
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">From repository to actionable insight</h2>
           </FadeIn>
 
           <div className="relative max-w-3xl mx-auto">
@@ -947,11 +983,11 @@ export default function LandingPage() {
             <div className="absolute left-[27px] top-4 bottom-4 w-[2px] bg-[#1E3025]" />
             <div className="space-y-8">
               {[
-                { n: "01", title: "Upload Repository", body: "Drop your Python source files or ZIP archive. BugZero ingests and normalises code within seconds.", color: "bg-[#3B82F6]" },
-                { n: "02", title: "Pylint + Bandit Scan", body: "Automated static analysis detects code quality issues, hardcoded secrets, SQL injection risks, and security anti-patterns.", color: "bg-[#F59E0B]" },
-                { n: "03", title: "CodeBERT Classification", body: "Fine-tuned ML model categorises each finding and assigns a verified confidence score from 0 to 100%.", color: "bg-[#2E7D32]" },
-                { n: "04", title: "LLM Root-Cause Analysis", body: "Your selected AI provider (OpenAI or Claude) generates human-readable explanations and patch diffs — grounded in static analysis evidence.", color: "bg-[#AAB5AF]" },
-                { n: "05", title: "Review Findings + Export", body: "Browse prioritised findings, resolve issues, track health trends, and export professional PDF or JSON audit reports.", color: "bg-[#4CAF50]" },
+                { n: "01", title: "Choose a repository", body: "Open an available repository and review its current branch and analysis context.", color: "bg-[#3B82F6]" },
+                { n: "02", title: "Analyze", body: "Start an analysis and follow its queued, parsing, and analysis stages.", color: "bg-[#F59E0B]" },
+                { n: "03", title: "Explore findings", body: "Review finding status, severity, confidence, technical risk, and source location.", color: "bg-[#2E7D32]" },
+                { n: "04", title: "Inspect evidence", body: "Open supported evidence paths and see whether a flow is complete and sufficient.", color: "bg-[#AAB5AF]" },
+                { n: "05", title: "Track health", body: "Review health dimensions, analysis history, and available repository trends.", color: "bg-[#4CAF50]" },
               ].map((step, i) => (
                 <FadeIn key={step.n} delay={i * 0.1} className="relative flex items-start gap-6">
                   <div className={`w-14 h-14 rounded-full ${step.color} flex items-center justify-center text-white font-bold text-sm shrink-0 z-10 shadow-lg`}>
@@ -969,12 +1005,12 @@ export default function LandingPage() {
       </Section>
 
       {/* ════════════════════════════════════════════════
-          COMPARISON TABLE
+          PRODUCT CONCEPTS
       ════════════════════════════════════════════════ */}
       <Section className="py-28 px-6 md:px-10">
         <div className="max-w-[1440px] mx-auto space-y-16">
           <FadeIn className="text-center space-y-4">
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">BugZero vs. Traditional Code Review</h2>
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">One workspace for repository investigation</h2>
           </FadeIn>
 
           <FadeIn>
@@ -982,19 +1018,19 @@ export default function LandingPage() {
               <table className="w-full text-left text-[13px]">
                 <thead>
                   <tr className="bg-[#0B120F] border-b border-[#1E3025]">
-                    <th className="px-6 py-4 font-semibold text-[#7E8A84] uppercase text-[11px] tracking-wider">Feature</th>
-                    <th className="px-6 py-4 font-semibold text-[#2E7D32] uppercase text-[11px] tracking-wider">BugZero AI Platform</th>
-                    <th className="px-6 py-4 font-semibold text-[#7E8A84] uppercase text-[11px] tracking-wider">Manual / Traditional</th>
+                    <th className="px-6 py-4 font-semibold text-[#7E8A84] uppercase text-[11px] tracking-wider">Product area</th>
+                    <th className="px-6 py-4 font-semibold text-[#2E7D32] uppercase text-[11px] tracking-wider">What you can inspect</th>
+                    <th className="px-6 py-4 font-semibold text-[#7E8A84] uppercase text-[11px] tracking-wider">Workspace</th>
                   </tr>
                 </thead>
                 <tbody className="bg-[#101915] divide-y divide-[#1E3025]">
                   {[
-                    ["Static Analysis", "Automatic (Pylint + Bandit)", "Manual / Inconsistent"],
-                    ["Confidence Scoring", "CodeBERT ML (0–100%)", "Subjective human judgment"],
-                    ["Suggested Code Diffs", "Instant patch preview", "Manual writing required"],
-                    ["Repository Health Tracking", "Continuous longitudinal metrics", "Not available"],
-                    ["Exportable Audit Reports", "PDF + JSON one-click export", "Manual documentation"],
-                    ["Evidence Before AI", "Always — static analysis first", "Typically skipped"],
+                    ["Repositories", "Provider, branch, languages, and analysis context", "Repository list"],
+                    ["Analysis", "Run status and available progress stages", "Analysis history"],
+                    ["Findings", "Severity, confidence, risk, and source location", "Finding detail"],
+                    ["Evidence", "Authority, completeness, sufficiency, and graph paths", "Evidence graph"],
+                    ["Health", "Assessed dimensions and available snapshots", "Health history"],
+                    ["Risk", "Technical risk and its assessment factors", "Risk assessment"],
                   ].map(([feat, bugzero, manual], i) => (
                     <motion.tr
                       key={feat}
@@ -1012,7 +1048,7 @@ export default function LandingPage() {
                       </td>
                       <td className="px-6 py-4">
                         <span className="flex items-center gap-2 text-[#7E8A84]">
-                          <XCircle className="w-4 h-4 shrink-0" /> {manual}
+                          <ArrowRight className="w-4 h-4 shrink-0" /> {manual}
                         </span>
                       </td>
                     </motion.tr>
@@ -1025,25 +1061,25 @@ export default function LandingPage() {
       </Section>
 
       {/* ════════════════════════════════════════════════
-          TECH STACK
+          PRODUCT AREAS
       ════════════════════════════════════════════════ */}
       <Section id="tech-stack" className="py-28 px-6 md:px-10 bg-[#0B120F] border-y border-[#1E3025]">
         <div className="max-w-[1440px] mx-auto space-y-16">
           <FadeIn className="text-center space-y-4">
-            <p className="text-[12px] font-semibold text-[#2E7D32] uppercase tracking-widest">Tech Stack</p>
-            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">Built on a modern, open-source stack</h2>
+            <p className="text-[12px] font-semibold text-[#2E7D32] uppercase tracking-widest">BugZero workspace</p>
+            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">A clear path from code to context</h2>
           </FadeIn>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
             {[
-              { layer: "Frontend",         color: "text-[#3B82F6]", border: "border-[#3B82F6]/20", bg: "bg-[#3B82F6]/5",
-                items: ["Next.js 15 App Router","TypeScript Strict","Tailwind CSS","TanStack Query","Framer Motion"] },
-              { layer: "Backend API",      color: "text-[#2E7D32]", border: "border-[#2E7D32]/20", bg: "bg-[#2E7D32]/5",
-                items: ["FastAPI","Python 3.11","PostgreSQL","SQLAlchemy","Pydantic v2"] },
-              { layer: "Static Analysis",  color: "text-[#F59E0B]", border: "border-[#F59E0B]/20", bg: "bg-[#F59E0B]/5",
-                items: ["Pylint","Bandit","CWE Mappings","AST Parsing","OWASP Top 10"] },
-              { layer: "ML & XAI",         color: "text-[#AAB5AF]", border: "border-[#AAB5AF]/20", bg: "bg-[#AAB5AF]/5",
-                items: ["CodeBERT Base","OpenAI GPT-4o","Claude 3.5 Sonnet","Confidence Scoring","LLM Patch Diffs"] },
+              { layer: "Repository", color: "text-[#3B82F6]", border: "border-[#3B82F6]/20", bg: "bg-[#3B82F6]/5",
+                items: ["Repository overview", "Branch and commit context", "Language metadata", "Analysis history", "Repository health"] },
+              { layer: "Analysis", color: "text-[#2E7D32]", border: "border-[#2E7D32]/20", bg: "bg-[#2E7D32]/5",
+                items: ["Queued status", "Parsing stage", "Repository intelligence", "Findings", "Completion status"] },
+              { layer: "Findings", color: "text-[#F59E0B]", border: "border-[#F59E0B]/20", bg: "bg-[#F59E0B]/5",
+                items: ["Rule and severity", "Source location", "Confidence", "Technical risk", "Finding status"] },
+              { layer: "Evidence", color: "text-[#AAB5AF]", border: "border-[#AAB5AF]/20", bg: "bg-[#AAB5AF]/5",
+                items: ["Evidence graph", "Authority", "Completeness", "Sufficiency", "Path diagnostics"] },
             ].map((stack) => (
               <FadeIn key={stack.layer}>
                 <motion.div
@@ -1078,16 +1114,16 @@ export default function LandingPage() {
 
           <div className="max-w-3xl mx-auto space-y-3">
             {[
-              { q: "What programming languages are supported?",
-                a: "BugZero provides full static analysis and CodeBERT classification for Python 3.x. JavaScript, TypeScript, and Go support is in active development." },
-              { q: "Does BugZero replace human developers?",
-                a: "No. BugZero surfaces evidence-backed findings, confidence scores, and code diffs so teams make faster, better-informed decisions. Human judgment remains central." },
-              { q: "Can I export audit reports?",
-                a: "Yes. Every repository review can be exported as a professional PDF or raw JSON report for compliance, handoffs, and team sharing." },
-              { q: "Is my code secure?",
-                a: "Your code is never used for model retraining and is processed securely using industry-standard encryption. BugZero is a stateless analysis service." },
-              { q: "How does BugZero differ from a simple linter?",
-                a: "Linters surface syntax issues. BugZero runs Pylint + Bandit static analysis, then layers CodeBERT ML classification and LLM root-cause explanations to give you the full picture: what's wrong, why it matters, and how to fix it." },
+              { q: "What can I explore in BugZero?",
+                a: "Repositories, analysis runs, findings, evidence graphs, technical risk assessments, and repository health are organized in one workspace." },
+              { q: "What does a finding include?",
+                a: "Available finding details can include its rule, severity, confidence, status, source location, evidence, and technical risk." },
+              { q: "What does evidence sufficiency mean?",
+                a: "Evidence records expose their authority, provenance, sufficiency, completeness, paths, and diagnostics. Incomplete or unresolved flows are not presented as sufficient." },
+              { q: "Why do some health dimensions say Unknown?",
+                a: "A dimension is shown as unknown when an assessment is not available; BugZero does not substitute a made-up score." },
+              { q: "What is Sample data?",
+                a: "When a live repository is not available, BugZero keeps the workspace usable with a clearly labeled demonstration repository and sample records." },
             ].map((faq) => (
               <FadeIn key={faq.q}>
                 <FAQItem q={faq.q} a={faq.a} />
@@ -1112,38 +1148,38 @@ export default function LandingPage() {
 
               <div className="relative space-y-5 max-w-2xl mx-auto">
                 <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-[12px] font-semibold bg-[#2E7D32]/15 text-[#4CAF50] border border-[#2E7D32]/35">
-                  <Sparkles className="w-3.5 h-3.5" /> Start today — no setup required
+                  <Sparkles className="w-3.5 h-3.5" /> Your repository intelligence workspace
                 </span>
                 <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
-                  Start reviewing smarter today
+                  Understand your repository
                 </h2>
                 <p className="text-[16px] text-[#AAB5AF] leading-relaxed">
-                  Join engineering teams using BugZero to eliminate security risks, track repository health, and ship with confidence.
+                  Investigate findings, follow evidence, and track repository health in BugZero.
                 </p>
               </div>
 
               <div className="relative flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Link href="/repositories">
+                <Link href="/login">
                   <motion.button
                     whileHover={{ scale: 1.03, boxShadow: "0 0 40px rgba(46,125,50,0.4)" }}
                     whileTap={{ scale: 0.97 }}
                     className="flex items-center gap-2.5 h-14 px-10 bg-[#2E7D32] hover:bg-[#388E3C] text-white text-[15px] font-bold rounded-xl transition-all"
                   >
                     <Play className="w-4 h-4" />
-                    Start Reviewing
+                    Enter the workspace
                     <ArrowRight className="w-4 h-4" />
                   </motion.button>
                 </Link>
-                <a href="https://github.com" target="_blank" rel="noreferrer">
+                <Link href="/login">
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.97 }}
                     className="flex items-center gap-2.5 h-14 px-8 border border-[#1E3025] hover:border-[#294134] hover:bg-[#16211B] text-white text-[15px] font-semibold rounded-xl transition-all"
                   >
-                    <Github className="w-4 h-4" />
-                    View on GitHub
+                    <TrendingUp className="w-4 h-4" />
+                    Explore repository health
                   </motion.button>
-                </a>
+                </Link>
               </div>
             </div>
           </FadeIn>
@@ -1158,15 +1194,13 @@ export default function LandingPage() {
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-[#2E7D32]" />
             <span className="font-bold text-white">BugZero</span>
-            <span>— AI Repository Review Platform</span>
+            <span>— Repository Intelligence</span>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-6">
-            <Link href="/repositories" className="hover:text-white transition-colors">Repositories</Link>
-            <Link href="/reports" className="hover:text-white transition-colors">Reports</Link>
-            <Link href="/settings" className="hover:text-white transition-colors">Settings</Link>
-            <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors flex items-center gap-1">
-              <Github className="w-3.5 h-3.5" /> GitHub
-            </a>
+            <Link href="/login" className="hover:text-white transition-colors">Repositories</Link>
+            <Link href="/login" className="hover:text-white transition-colors">Findings</Link>
+            <Link href="/login" className="hover:text-white transition-colors">Health</Link>
+            <Link href="/login" className="hover:text-white transition-colors">Analysis history</Link>
           </div>
           <span>© 2026 BugZero. All rights reserved.</span>
         </div>

@@ -1,0 +1,10 @@
+[project]
+name = "bugzero-engine"
+version = "0.1.0"
+description = "BugZero Python analysis engine placeholder"
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

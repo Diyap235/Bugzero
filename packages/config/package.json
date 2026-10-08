@@ -1,0 +1,19 @@
+{
+  "name": "@bugzero/config",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"No config tests configured yet\""
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "eslint": "^8"
+  }
+}
