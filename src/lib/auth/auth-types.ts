@@ -1,4 +1,4 @@
-export type AuthRole = "DEMO_USER";
+export type AuthRole = string;
 
 export interface AuthUser {
   userId: string;
@@ -18,6 +18,11 @@ export interface AuthCredentials {
   password: string;
 }
 
+export interface RegistrationDetails extends AuthCredentials {
+  displayName: string;
+  workspaceName: string;
+}
+
 export interface AuthSessionState {
   session: AuthSession | null;
   expired: boolean;
@@ -25,6 +30,8 @@ export interface AuthSessionState {
 
 export interface AuthService {
   login(credentials: AuthCredentials): Promise<AuthSession>;
+  register(details: RegistrationDetails): Promise<AuthSession>;
+  validateSession(): Promise<void>;
   getSessionState(): AuthSessionState;
   logout(): void;
 }
@@ -35,5 +42,6 @@ export interface AuthContextValue {
   isLoading: boolean;
   sessionExpired: boolean;
   login(credentials: AuthCredentials): Promise<void>;
+  register(details: RegistrationDetails): Promise<void>;
   logout(): void;
 }

@@ -2,6 +2,7 @@
 
 import { AlertTriangle, LoaderCircle, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
+import { ApiError } from "@/lib/api-client";
 
 export function PageHeading({ eyebrow, title, description, action }: {
   eyebrow?: string;
@@ -67,24 +68,28 @@ export function StateMessage({ title, message, onRetry, action }: {
   );
 }
 
-export function ResourceState({ loading, error, empty, retry, emptyTitle = "No data available", sample = false }: {
+export function ResourceState({ loading, error, empty, retry, emptyTitle = "No data available" }: {
   loading: boolean;
   error: Error | null;
   empty: boolean;
   retry?: () => void;
   emptyTitle?: string;
-  sample?: boolean;
 }) {
-  if (sample) {
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card/70 px-3 py-2 text-[11px] text-text-muted" role="status">
-        <span>Sample data · Example repository and findings are shown until workspace data is available.</span>
-        {retry && <button onClick={retry} className="text-primary hover:underline">Refresh</button>}
-      </div>
-    );
-  }
   if (loading) return <StateMessage title="Loading workspace" message="Preparing your repository intelligence…" />;
-  if (error) return <StateMessage title="Workspace data unavailable" message="This view couldn't be loaded right now. Try again in a moment." onRetry={retry} />;
+  if (error) {
+    const state = error instanceof ApiError ? error.code : "NETWORK_ERROR";
+    const messages = {
+      UNAUTHORIZED: ["Sign-in required", "Your session is no longer authorized. Sign in again to continue."],
+      FORBIDDEN: ["Access denied", "Your account does not have permission to view this resource."],
+      NOT_FOUND: ["Resource not found", "The requested resource does not exist or is no longer available."],
+      SERVER_ERROR: ["Service temporarily unavailable", "The BugZero service could not complete this request. Try again later."],
+      HTTP_ERROR: ["Request could not be completed", "The BugZero service rejected this request."],
+      INVALID_RESPONSE: ["Invalid service response", "The BugZero service returned data that could not be read."],
+      NETWORK_ERROR: ["Workspace data unavailable", "The BugZero service could not be reached. Check the service and try again."],
+    } as const;
+    const [title, message] = messages[state];
+    return <StateMessage title={title} message={message} onRetry={retry} />;
+  }
   if (empty) return <StateMessage title={emptyTitle} message="There are no records to show for this view yet." />;
   return null;
 }

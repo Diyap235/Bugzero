@@ -10,3 +10,5 @@ export * from './evidence/schema.js';
 export * from './risk/schema.js';
 export * from './reports/schema.js';
 export * from './reviews/schema.js';
+export * from './auth/schema.js';
+export * from './ai/schema.js';

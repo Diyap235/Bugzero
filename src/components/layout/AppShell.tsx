@@ -35,7 +35,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
   if (auth.isLoading || !auth.isAuthenticated) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-4 text-sm text-text-muted" role="status">
-        {auth.sessionExpired ? "Your demo session expired. Returning to sign in…" : "Checking your demo session…"}
+        {auth.sessionExpired ? "Your session expired. Returning to sign in…" : "Checking your session…"}
       </main>
     );
   }

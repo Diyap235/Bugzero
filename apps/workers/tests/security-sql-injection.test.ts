@@ -16,7 +16,7 @@ import { AnalyzerContext } from '../src/analyzers/analyzer-context.js';
 import { AnalyzerOrchestrator } from '../src/analyzers/analyzer-orchestrator.js';
 import { AnalyzerRegistry } from '../src/analyzers/analyzer-registry.js';
 import { InMemorySourceAccess } from '../src/analyzers/source-access.js';
-import { sqlInjectionAnalyzer } from '../src/analyzers/security/sql-injection-analyzer.js';
+import { resolveRelativeImportPath, sqlInjectionAnalyzer } from '../src/analyzers/security/sql-injection-analyzer.js';
 import { sqlInjectionRule, sqlInjectionSourcePatterns, sqlInjectionSinkPatterns } from '../src/analyzers/security/rules/sql-injection.js';
 import type { AnalyzerContext as AnalyzerContextType } from '../src/analyzers/analyzer-context.js';
 import type { RepositoryIntelligenceSnapshot } from '../src/intelligence/types.js';
@@ -128,6 +128,101 @@ function makeFixture(
   };
 }
 
+function makeMultiFileFixture(sources: Record<string, string>): Fixture {
+  const parsedFiles = Object.entries(sources).map(([filePath, sourceContent]) => {
+    const extension = filePath.split('.').pop()?.toLowerCase();
+    const language = normalizeLanguage(extension === 'py' ? 'Python'
+      : extension === 'js' || extension === 'jsx' ? 'JavaScript' : 'TypeScript');
+    return {
+      filePath,
+      sourceContent,
+      parsed: parseWithLanguageAdapter({
+        repositoryId,
+        commitId,
+        filePath,
+        language,
+        contentHash: `fixture:${filePath}`,
+        sourceContent,
+      }),
+    };
+  });
+  const entities: CodeEntityRecord[] = parsedFiles.flatMap(({ parsed }) => parsed.entities.map((entity) => ({
+    id: entity.id,
+    organization_id: organizationId,
+    repository_id: repositoryId,
+    commit_id: commitId,
+    entity_key: entity.id,
+    entity_type: entity.kind === 'VARIABLE' ? 'SYMBOL'
+      : entity.kind === 'INTERFACE' ? 'TYPE'
+        : entity.kind === 'NAMESPACE' ? 'MODULE'
+          : entity.kind,
+    name: entity.name,
+    qualified_name: entity.qualifiedName,
+    file_path: entity.filePath,
+    start_line: entity.startLine,
+    end_line: entity.endLine,
+    provenance: entity.provenance,
+    created_at: '',
+  })));
+  const relationships: CodeRelationshipRecord[] = parsedFiles.flatMap(({ parsed }) =>
+    parsed.relationships.map((relationship) => ({
+      id: relationship.id,
+      organization_id: organizationId,
+      repository_id: repositoryId,
+      commit_id: commitId,
+      source_entity_id: relationship.sourceEntityId,
+      target_entity_id: relationship.targetEntityId,
+      relation: relationship.kind,
+      resolution: relationship.resolution,
+      confidence: 'HIGH',
+      provenance: relationship.provenance,
+      created_at: '',
+    })));
+  const entityIndex = new Map(entities.map((entity) => [entity.id, entity]));
+  const outgoingRelationships = new Map<string, CodeRelationshipRecord[]>();
+  const incomingRelationships = new Map<string, CodeRelationshipRecord[]>();
+  for (const relationship of relationships) {
+    outgoingRelationships.set(relationship.source_entity_id, [
+      ...(outgoingRelationships.get(relationship.source_entity_id) ?? []),
+      relationship,
+    ]);
+    incomingRelationships.set(relationship.target_entity_id, [
+      ...(incomingRelationships.get(relationship.target_entity_id) ?? []),
+      relationship,
+    ]);
+  }
+  const intelligence: RepositoryIntelligenceSnapshot = {
+    organizationId,
+    repositoryId,
+    commitId,
+    status: 'COMPLETE',
+    entities,
+    relationships,
+    dependencies: [],
+    dependencyEdges: [],
+    entityIndex,
+    outgoingRelationships,
+    incomingRelationships,
+    createdAt: '',
+    irVersion: parsedFiles[0]?.parsed.irVersion ?? 'bugzero-ir-v2',
+  };
+  const sourceAccess = new InMemorySourceAccess(new Map(parsedFiles.map(({ filePath, sourceContent }) => [filePath, sourceContent])));
+  return {
+    intelligence,
+    context: new AnalyzerContext({
+      organizationId,
+      repositoryId,
+      commitId,
+      analysisRunId: '44444444-4444-4444-8444-444444444444',
+      analysisProfileId: 'profile-1',
+      analysisScope: { mode: 'FULL' },
+      codeIR: { entities, relationships },
+      repositoryIntelligence: intelligence,
+      sourceAccess,
+    }),
+  };
+}
+
 class MemoryFindings {
   readonly findings = new Map<string, Finding>();
   readonly occurrences = new Map<string, FindingOccurrence>();
@@ -212,12 +307,36 @@ async function run(
   return { ...fixture, result };
 }
 
+async function runFiles(sources: Record<string, string>) {
+  const fixture = makeMultiFileFixture(sources);
+  const result = await sqlInjectionAnalyzer.analyze(fixture.context);
+  return { ...fixture, result };
+}
+
 test('security rule registry exposes explicit SQL sources and sinks', () => {
   assert.equal(sqlInjectionRule.id, 'SECURITY.SQL_INJECTION');
   assert.equal(sqlInjectionRule.version, '1.0.0');
   assert.equal(sqlInjectionRule.severity, 'HIGH');
   assert.deepEqual(sqlInjectionSourcePatterns.javascript.inputProperties, ['query', 'body', 'params']);
   assert.deepEqual(sqlInjectionSinkPatterns.receiverMethods.cursor, ['execute']);
+});
+
+test('resolves supported relative import extensions and index files within the snapshot', () => {
+  const cases = [
+    ['./foo', ['src/foo.ts'], 'src/foo.ts'],
+    ['./foo.ts', ['src/foo.ts'], 'src/foo.ts'],
+    ['./foo.tsx', ['src/foo.tsx'], 'src/foo.tsx'],
+    ['./foo.js', ['src/foo.js'], 'src/foo.js'],
+    ['./foo.jsx', ['src/foo.jsx'], 'src/foo.jsx'],
+    ['./foo', ['src/foo/index.ts'], 'src/foo/index.ts'],
+    ['./foo', ['src/foo/index.js'], 'src/foo/index.js'],
+    ['../shared/foo', ['shared/foo.js'], 'shared/foo.js'],
+  ] as const;
+  for (const [specifier, availableFiles, expected] of cases) {
+    assert.equal(resolveRelativeImportPath('src/index.ts', specifier, availableFiles), expected);
+  }
+  assert.equal(resolveRelativeImportPath('src/index.ts', '../../../outside.ts', ['outside.ts']), null);
+  assert.equal(resolveRelativeImportPath('src/index.ts', 'typescript', ['src/typescript.ts']), null);
 });
 
 test('finds SQL injection through local assignment with a complete authoritative taint path', async () => {
@@ -241,6 +360,137 @@ function handler(req) {
   assert.ok((finding.evidenceGraph?.edges.length ?? 0) >= 3);
   assert.ok(finding.evidenceGraph?.paths[0]?.nodeIds.length);
   assert.ok(finding.evidenceGraph?.nodes.every((node) => node.attributes.provenance === 'SECURITY_ANALYZER'));
+});
+
+test('propagates taint through a relative named import to a real SQL sink', async () => {
+  const { result } = await runFiles({
+    'src/index.ts': `import { getUser } from './database';
+
+export function handleRequest(req: any) {
+  return getUser(req.query.id);
+}`,
+    'src/database.ts': `export function getUser(userId: string) {
+  const query = \`SELECT * FROM users WHERE id = \${userId}\`;
+  return db.query(query);
+}`,
+  });
+  assert.equal(result.status, 'COMPLETED');
+  assert.equal(result.findings.length, 1);
+  assert.equal(result.findings[0]?.ruleId, 'SECURITY.SQL_INJECTION');
+  assert.equal(result.findings[0]?.evidenceGraph?.sufficiency, 'SUFFICIENT');
+  assert.equal(result.findings[0]?.evidenceGraph?.completeness, 'COMPLETE');
+  assert.ok(result.findings[0]?.evidenceGraph?.edges.some((edge) => edge.relation === 'PASSES_ARGUMENT'));
+});
+
+test('proves taint through static CommonJS requires, exports, SQL construction, and db.query', async () => {
+  const { result } = await runFiles({
+    'src/index.js': `const { getUser } = require("./database");
+const { runReport } = require("./reports");
+
+function main(req) {
+  const userId = req.query.userId;
+  const user = getUser(userId);
+  const report = req.query.report;
+  const result = runReport(report);
+  return { user, result };
+}
+
+module.exports = { main };`,
+    'src/database.js': `function executeQuery(db, query) {
+  return db.query(query);
+}
+
+function getUser(userId) {
+  const query = "SELECT * FROM users WHERE id = " + userId;
+  return executeQuery(global.db, query);
+}
+
+module.exports = { getUser };`,
+    'src/reports.js': `const { exec } = require("child_process");
+
+function runReport(reportName) {
+  return exec("generate-report " + reportName);
+}
+
+module.exports = { runReport };`,
+    'src/utils.js': `function formatUser(user) {
+  if (!user) return "Unknown user";
+  return \`\${user.id}: \${user.name}\`;
+}
+
+module.exports = { formatUser };`,
+  });
+  assert.equal(result.status, 'COMPLETED');
+  assert.equal(result.findings.length, 1);
+  assert.equal(result.findings[0]?.ruleId, 'SECURITY.SQL_INJECTION');
+  assert.equal(result.findings[0]?.confidence, 'HIGH');
+  assert.equal(result.findings[0]?.evidenceGraph?.completeness, 'COMPLETE');
+  assert.equal(result.findings[0]?.evidenceGraph?.sufficiency, 'SUFFICIENT');
+  const evidence = result.findings[0]?.evidenceGraph;
+  assert.ok(evidence);
+  assert.ok(evidence.nodes.some((node) => node.nodeType === 'SOURCE' && node.label === 'req.query.userId'));
+  assert.ok(evidence.nodes.some((node) => node.nodeType === 'TRANSFORMATION' && node.label === 'Dynamic SQL construction'));
+  assert.ok(evidence.nodes.some((node) => node.nodeType === 'SINK' && node.label === 'db.query'));
+  assert.ok(evidence.nodes.every((node) => node.attributes.authority === 'AUTHORITATIVE'));
+  assert.ok(evidence.edges.every((edge) => edge.resolution === 'EXACT'));
+  assert.ok(evidence.edges.some((edge) => edge.relation === 'PASSES_ARGUMENT'));
+  assert.ok(evidence.edges.some((edge) => edge.relation === 'REACHES_SQL_SINK'));
+  assert.doesNotMatch(result.diagnostics.join(' '), /UNRESOLVED_REFERENCE/);
+});
+
+test('resolves the uploaded TEST flow but does not treat a non-sink helper as SQL Injection', async () => {
+  const { result } = await runFiles({
+    'src/index.ts': `import { getUser } from './database';
+
+export function handleRequest(req: any) {
+  const userId = req.query.id;
+  return getUser(userId);
+}`,
+    'src/database.ts': `export function getUser(userId: string) {
+  const query = \`SELECT * FROM users WHERE id = \${userId}\`;
+  return executeQuery(query);
+}
+
+function executeQuery(query: string) {
+  return { query };
+}`,
+  });
+  assert.equal(result.status, 'COMPLETED');
+  assert.equal(result.findings.some((finding) => finding.ruleId === 'SECURITY.SQL_INJECTION'), false);
+  assert.doesNotMatch(result.diagnostics.join(' '), /unresolved call/i);
+});
+
+test('an unresolved non-SQL flow does not make the analyzer partial, but unresolved SQL flow does', async () => {
+  const unrelatedFlow = await runFiles({
+    'src/index.ts': `import { missing } from './missing';
+
+export function handleRequest(req: any) {
+  return missing(req.query.id);
+}`,
+  });
+  assert.equal(unrelatedFlow.result.findings.length, 0);
+  assert.equal(unrelatedFlow.result.status, 'COMPLETED');
+
+  const unresolvedSqlFlow = await runFiles({
+    'src/index.ts': `import { missing } from './missing';
+
+export function handleRequest(req: any) {
+  return db.query("SELECT * FROM users WHERE id=" + missing(req.query.id));
+}`,
+  });
+  assert.equal(unresolvedSqlFlow.result.findings.length, 0);
+  assert.equal(unresolvedSqlFlow.result.status, 'PARTIAL');
+  assert.match(unresolvedSqlFlow.result.diagnostics.join(' '), /UNRESOLVED_REFERENCE/i);
+
+  const untainted = await runFiles({
+    'src/index.ts': `import { missing } from './missing';
+
+export function handleRequest() {
+  return missing('static');
+}`,
+  });
+  assert.equal(untainted.result.findings.length, 0);
+  assert.equal(untainted.result.status, 'COMPLETED');
 });
 
 test('propagates taint through exact call, parameter, and return relationships', async () => {

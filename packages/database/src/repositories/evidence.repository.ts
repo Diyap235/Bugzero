@@ -314,8 +314,8 @@ export class EvidenceRepository {
       input.completeness,
       input.completeness === 'COMPLETE',
       input.analyzerVersions ?? {},
-      input.paths ?? [],
-      input.diagnostics ?? [],
+      JSON.stringify(input.paths ?? []),
+      JSON.stringify(input.diagnostics ?? []),
     ];
   }
 

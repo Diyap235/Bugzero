@@ -2,6 +2,8 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
 import { Redis } from 'ioredis';
 import {
   analysisRepository,
+  aiInvestigationRepository,
+  authRepository,
   commitsRepository,
   membersRepository,
   evidenceRepository,
@@ -17,7 +19,6 @@ import {
   withOrganizationContext,
 } from '@bugzero/database';
 import { getRedisUrl } from '@bugzero/config';
-import { GitHubRepositoryProvider } from '@bugzero/workers/github-provider';
 import {
   createAnalysisQueue,
   enqueueAnalysisJob,
@@ -31,6 +32,8 @@ import {
 } from './modules/analysis/routes.js';
 import { registerProductRoutes } from './modules/product/routes.js';
 import type { ProductRouteDependencies } from './modules/product/routes.js';
+import { registerAuthRoutes } from './auth/routes.js';
+import { registerLocalZipRepositoryRoute } from './modules/repositories/local-zip.js';
 
 export const serverName = 'bugzero-api';
 
@@ -49,14 +52,32 @@ export interface ApiServerOptions {
   repositories?: Pick<RepositoryRepository, 'getById'>;
   commits?: Pick<CommitRepository, 'getByCommitSha'>;
   members?: Pick<MemberRepository, 'getMembership'>;
+  auth?: {
+    accounts?: Pick<typeof authRepository, 'createAccountWorkspace' | 'getAccountByEmail'>;
+    getSessionContext?: typeof authRepository.getSessionContext;
+    members?: Pick<MemberRepository, 'getMembership'>;
+    issueToken?: (userId: string, organizationId: string) => Promise<{
+      accessToken: string;
+      issuedAt: number;
+      expiresAt: number;
+    }>;
+  };
   queue?: AnalysisApiDependencies['queue'];
   product?: Partial<Omit<ProductRouteDependencies, 'authenticate'>> & {
     authenticate?: ProductRouteDependencies['authenticate'];
+  };
+  localZip?: {
+    members?: Pick<MemberRepository, 'getMembership'>;
+    repositories?: Pick<RepositoryRepository, 'createWithCommitAndFiles'>;
   };
 }
 
 export function createApiServer(options: ApiServerOptions): FastifyInstance {
   const server = Fastify({ logger: true });
+  server.addContentTypeParser('application/zip', {
+    parseAs: 'buffer',
+    bodyLimit: 10 * 1024 * 1024,
+  }, (_request, body, done) => done(null, body));
   const principals = new WeakMap<FastifyRequest, AuthenticatedAnalysisPrincipal | null>();
   const authenticate = async (request: FastifyRequest): Promise<AuthenticatedAnalysisPrincipal | null> => {
     if (principals.has(request)) return principals.get(request) ?? null;
@@ -80,11 +101,13 @@ export function createApiServer(options: ApiServerOptions): FastifyInstance {
   });
   server.setErrorHandler((error, request, reply) => {
     const errorName = error instanceof Error ? error.name : 'UnknownError';
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
     const candidateStatusCode = typeof error === 'object' && error !== null
       && 'statusCode' in error && typeof error.statusCode === 'number'
       ? error.statusCode
       : null;
-    request.log.error({ errorName, statusCode: candidateStatusCode }, 'Unhandled API request error');
+    request.log.error({ errorName, errorMessage, errorStack, statusCode: candidateStatusCode }, 'Unhandled API request error');
     const statusCode = candidateStatusCode !== null && candidateStatusCode >= 400 && candidateStatusCode < 500
       ? candidateStatusCode
       : 500;
@@ -128,7 +151,19 @@ export function createApiServer(options: ApiServerOptions): FastifyInstance {
     risks: options.product?.risks ?? riskAssessmentRepository,
     health: options.product?.health ?? healthRepository,
     reports: options.product?.reports ?? reportsRepository,
-    github: options.product?.github ?? new GitHubRepositoryProvider({ token: process.env.GITHUB_TOKEN }),
+    aiInvestigations: options.product?.aiInvestigations ?? aiInvestigationRepository,
+  });
+  registerLocalZipRepositoryRoute(server, {
+    authenticate,
+    members: options.localZip?.members ?? options.product?.members ?? options.members ?? membersRepository,
+    repositories: options.localZip?.repositories ?? repositoriesRepository,
+  });
+  registerAuthRoutes(server, {
+    authenticate,
+    accounts: options.auth?.accounts ?? authRepository,
+    getSessionContext: options.auth?.getSessionContext ?? authRepository.getSessionContext.bind(authRepository),
+    members: options.auth?.members ?? options.members ?? membersRepository,
+    issueToken: options.auth?.issueToken,
   });
   return server;
 }

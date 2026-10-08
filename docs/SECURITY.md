@@ -4,7 +4,7 @@
 
 **PARTIAL — deterministic SQL injection detection is implemented as `SECURITY.SQL_INJECTION` v1.0.0.** Other security families remain planned. This is a conservative static-analysis slice, not a general security audit or a framework-independent guarantee.
 
-The security analyzer runs inside the existing worker `AnalyzerOrchestrator`. It uses scoped Code IR entities and exact Repository Intelligence `CALLS` relationships to bind source analysis to known functions and to constrain interprocedural propagation. Source expressions and SQL construction are refined from source syntax using the existing TypeScript AST parser for JavaScript/TypeScript and a narrow explicit Python statement subset. No repository code is executed.
+The security analyzer runs inside the existing worker `AnalyzerOrchestrator`. It uses scoped Code IR entities and exact Repository Intelligence `CALLS` relationships for same-file calls. For JavaScript/TypeScript it also resolves unambiguous named/default relative imports to exported functions in the already-loaded repository snapshot; these analyzer-local call links are not persisted as Code IR relationships. Source expressions and SQL construction are refined from source syntax using the existing TypeScript AST parser for JavaScript/TypeScript and a narrow explicit Python statement subset. No repository code is executed.
 
 ```text
 Code IR + Repository Intelligence
@@ -17,7 +17,13 @@ Code IR + Repository Intelligence
   -> authoritative occurrence-linked evidence graph
 ```
 
-The analyzer, not AI, produces the finding. AI is not authoritative and is not invoked by this implementation. No autonomous remediation or runtime/sandbox execution is implemented.
+The analyzer, not AI, produces the finding. An optional post-analysis Groq investigator may provide an advisory explanation for an already-persisted finding; it cannot create findings or alter deterministic evidence, risk, or run status. No autonomous remediation or runtime/sandbox execution is implemented.
+
+## Optional AI investigation
+
+The worker can be configured with server-side `GROQ_API_KEY` and `GROQ_MODEL`. No key is needed for deterministic analysis, and the key must not be exposed through a `NEXT_PUBLIC_*` variable. AI requests are limited to persisted finding/evidence context and nearby source snippets; the whole repository is never submitted. Context size, source excerpts, graph elements, paths, output tokens, timeout, and retries are bounded. Selected credential assignments, bearer tokens, private-key blocks, and sensitive file paths receive best-effort redaction/exclusion; this is not a general secret-scanning guarantee.
+
+Groq output is accepted only as a strict structured explanation. Incomplete analysis or evidence forces `INSUFFICIENT_EVIDENCE`; provider/configuration errors are stored as safe statuses and do not change deterministic analysis status. The result is associated with its occurrence and evidence snapshot and is idempotently reused on replay. Finding-detail readback exposes validated structured fields, not prompt/context or provider error text. See [ADR-007](adr/ADR-007-ai-boundary.md).
 
 ## Implemented rule
 
@@ -55,11 +61,11 @@ The analyzer does not recognize generic calls named `escape`, `sanitize`, or `cl
 
 ## Data-flow boundary
 
-- **JavaScript/TypeScript:** supports direct assignments and aliases, string concatenation, template interpolation, exact same-file calls present in Code IR/Repository Intelligence, simple identifier parameters, and simple returned expressions. Exact calls are represented in evidence; cycles and recursion are bounded.
+- **JavaScript/TypeScript:** supports direct assignments and aliases, string concatenation, template interpolation, exact same-file calls present in Code IR/Repository Intelligence, and unambiguous named/default relative imports to exported functions in the loaded snapshot. Supported relative resolution includes extensionless, `.ts`, `.tsx`, `.js`, `.jsx`, and `index.ts`/`index.js` forms. Simple identifier parameters and returned expressions are supported. Resolved calls are represented in evidence; cycles and recursion are bounded.
 - **Python:** supports straight-line source assignment/subscript, simple variable aliases, SQL-literal concatenation with a tracked input variable, and direct execution of a tracked query variable. It does not claim Python function-parameter, call, or return propagation. Relevant unsupported constructs produce PARTIAL diagnostics rather than findings.
-- **All languages:** branches, loops, destructuring, complex expressions, aliases/framework adapters, dynamic dispatch, unresolved calls, and other unsupported semantics are not inferred as exact. When a relevant unsupported construct is detected, the result is PARTIAL. No runtime execution or compiler-grade data-flow analysis is performed.
+- **All languages:** branches, loops, destructuring, complex expressions, framework adapters, dynamic dispatch, unresolved calls, and other unsupported semantics are not inferred as exact. A tainted value reaching an unresolved call is reported as `UNRESOLVED_REFERENCE`, produces no finding for that unresolved path, and makes security coverage PARTIAL; an unrelated unresolved import does not by itself make the analyzer partial. No runtime execution or compiler-grade data-flow analysis is performed.
 
-An unresolved `CALLS` relationship is never treated as an exact propagation edge. If the full source-to-sink chain cannot be established, the analyzer emits no HIGH-confidence SQL injection finding.
+An unresolved `CALLS` relationship is never treated as an exact propagation edge. If the full source-to-sink chain cannot be established, the analyzer emits no HIGH-confidence SQL injection finding. Constructing SQL-shaped text or passing it to a local helper that does not call a recognized database sink is not sufficient.
 
 ## Evidence and persistence
 
@@ -73,4 +79,4 @@ The analyzer respects the existing `maxFiles`, `maxEntities`, and `maxDurationMs
 
 ## Deferred
 
-XSS, command injection, path traversal, SSRF, unsafe deserialization, secret detection, dependency CVEs, AI explanation, dynamic execution, sandbox execution, and autonomous fixes are **not implemented**. Deterministic risk scoring is implemented separately; see [RISK.md](RISK.md).
+XSS, command injection, path traversal, SSRF, unsafe deserialization, secret detection, dependency CVEs, dynamic execution, sandbox execution, and autonomous fixes are **not implemented**. AI explanation is optional and advisory only. Deterministic risk scoring is implemented separately; see [RISK.md](RISK.md).

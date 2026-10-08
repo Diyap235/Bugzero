@@ -1,5 +1,0 @@
-# Placeholder docker-compose file for the BugZero monorepo foundation.
-services:
-  placeholder:
-    image: busybox:latest
-    command: ["echo", "BugZero foundation placeholder"]

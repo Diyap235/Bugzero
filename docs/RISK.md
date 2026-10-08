@@ -2,7 +2,7 @@
 
 ## Status and boundary
 
-**IMPLEMENTED (deterministic, profile-versioned, evidence-aware; live database behavior NOT VERIFIED).** The worker calculates risk after an occurrence and its immutable evidence snapshot have been persisted. The engine does not change finding identity, severity, confidence, lifecycle, business priority, accepted-risk, exceptions, or human disposition. It updates only the finding's `current_risk` projection after persisting the immutable assessment.
+**IMPLEMENTED (deterministic, profile-versioned, evidence-aware; live database behavior verified 2026-10-08).** The worker calculates risk after an occurrence and its immutable evidence snapshot have been persisted. The engine does not change finding identity, severity, confidence, lifecycle, business priority, accepted-risk, exceptions, or human disposition. It updates only the finding's `current_risk` projection after persisting the immutable assessment.
 
 The assessment is a technical prioritization score, not a probability, business-impact estimate, exploitability claim, or replacement for severity. Reachability and exploitability remain `UNKNOWN` unless explicitly supplied as known dimensions. Dependency exposure remains `UNKNOWN`, and affected-module count remains unavailable; neither is scored.
 

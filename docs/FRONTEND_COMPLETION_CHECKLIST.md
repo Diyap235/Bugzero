@@ -4,11 +4,11 @@
 >
 > **Execution rule:** Complete tasks strictly in order. Do not skip unfinished P0 work to work on later polish.
 >
-> **Current mode:** Demo/Productization
+> **Current mode:** Authenticated MVP
 >
-> **Data strategy:** The frontend currently uses centralized sample data. Real backend/API integration is NOT required for this frontend completion sprint.
+> **Data strategy:** Authenticated workspace routes use tenant-scoped API data only. No sample fallback is allowed.
 >
-> **Authentication:** Demo token-based authentication is implemented. Do not rebuild authentication unless a checklist item explicitly requires it.
+> **Authentication:** Persisted account/workspace onboarding and Ed25519 JWT login are implemented.
 
 ---
 
@@ -33,9 +33,9 @@
 - [ ] No unnecessary dependencies.
 - [ ] Do not rewrite working backend systems.
 - [ ] Do not remove the existing backend.
-- [ ] Do not create duplicate sample datasets.
-- [ ] Use the existing centralized `sampleWorkspace`.
-- [ ] Keep sample data internally consistent across every screen.
+- [x] Do not create duplicate sample datasets.
+- [x] Keep the public landing-page illustration separate from authenticated workspace data.
+- [x] Never use sample repositories/findings as an authenticated API fallback.
 - [ ] Prefer existing components and architecture where possible.
 - [ ] Keep TypeScript strict.
 - [ ] Do not weaken existing tests.
@@ -44,35 +44,30 @@
 
 # 1. CURRENT AUTHENTICATION BASELINE
 
-The following is already implemented and should be preserved.
+The real account and workspace flow is implemented and should be preserved.
 
-- [x] Landing → Login → Dashboard flow
-- [x] Demo login
-- [x] Demo credentials
-- [x] Demo authentication provider boundary
+- [x] Account registration and workspace creation
+- [x] Password hashes persisted in PostgreSQL
+- [x] Authenticated login through the signed JWT architecture
+- [x] Account membership checked against tenant-scoped data
 - [x] `useAuth()`
 - [x] Session helpers
-- [x] Random opaque demo token
+- [x] Server-issued Ed25519 JWT session
 - [x] `sessionStorage` session
-- [x] 24-hour session expiry
-- [x] Password not persisted
+- [x] Session survives page refresh
+- [x] Password hash persisted; plaintext password is not
 - [x] Password not included in token
 - [x] Protected workspace routes
 - [x] Logout
 - [x] Expired-session handling
 - [x] Invalid credential handling
-- [x] Dashboard works without API requests
-- [x] 94/94 tests passing
-- [x] Typecheck passing
-- [x] Lint passing
-- [x] Build passing
 
 ### Authentication constraints
 
-- [ ] Do not convert demo authentication into fake production authentication.
+- [x] Do not add demo authentication or fake users.
 - [ ] Do not add an external auth provider.
-- [ ] Do not require the BugZero API for login.
-- [ ] Keep the auth boundary replaceable for future server authentication.
+- [x] Use the existing server-side authentication and tenant authorization architecture.
+- [x] Keep the auth service behind the `AuthService` boundary.
 
 ---
 
@@ -958,7 +953,7 @@ Also test manually:
 - [ ] Valid login
 - [ ] Invalid login
 - [ ] Dashboard
-- [ ] Refresh session
+- [ ] Validate session
 - [ ] Logout
 - [ ] Protected route
 - [ ] Expired session

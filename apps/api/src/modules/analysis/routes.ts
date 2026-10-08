@@ -194,7 +194,7 @@ export function registerAnalysisRoutes(server: FastifyInstance, dependencies: An
       ? rawProgress.analyzers.map((entry) => {
         if (typeof entry !== 'object' || entry === null) return {};
         const analyzer = entry as Record<string, unknown>;
-        return { status: analyzer.status, metrics: analyzer.metrics };
+        return { status: analyzer.status, metrics: analyzer.metrics, diagnostics: analyzer.diagnostics };
       })
       : [];
     const progress: Record<string, unknown> = {
@@ -210,6 +210,14 @@ export function registerAnalysisRoutes(server: FastifyInstance, dependencies: An
       intelligenceDurationMs: rawProgress.intelligenceDurationMs,
       findings: rawProgress.findings,
       analyzers: analyzerProgress,
+      parseDiagnostics: rawProgress.parseDiagnostics,
+      budgetDiagnostics: rawProgress.budgetDiagnostics,
+      resourceBudget: rawProgress.resourceBudget,
+      evidence: rawProgress.evidence,
+      risk: rawProgress.risk,
+      mlSignals: rawProgress.mlSignals,
+      health: rawProgress.health,
+      aiInvestigation: rawProgress.aiInvestigation,
     };
     for (const key of Object.keys(progress)) {
       if (progress[key] === undefined) delete progress[key];

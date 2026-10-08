@@ -39,9 +39,9 @@ The API enqueues only small identifiers and never reads or executes repository s
 | Semantic Code IR, Repository Intelligence, impact analysis | IMPLEMENTED with documented parser limits |
 | Structural/Quality Analyzer v1 and finding persistence | IMPLEMENTED |
 | Deterministic finding evidence graph | IMPLEMENTED (bounded; see [EVIDENCE.md](EVIDENCE.md)) |
-| Deterministic Risk Engine v1 | IMPLEMENTED (versioned, evidence-aware, bounded score; see [RISK.md](RISK.md)) |
-| Repository Health v1 | IMPLEMENTED (deterministic Security/Quality/Maintainability aggregation; Dependency/Reliability UNKNOWN; see [HEALTH.md](HEALTH.md)) |
-| Live PostgreSQL migration and API-to-worker deployment | NOT VERIFIED |
+| Deterministic Risk Engine v1 | IMPLEMENTED (versioned, evidence-aware, bounded score; live behavior verified; see [RISK.md](RISK.md)) |
+| Repository Health v1 | IMPLEMENTED (deterministic Security/Quality/Maintainability aggregation; Dependency/Reliability UNKNOWN; live behavior verified; see [HEALTH.md](HEALTH.md)) |
+| Live PostgreSQL migration and API-to-worker deployment | VERIFIED (local, 2026-10-08) |
 | SQL injection security rule v1 | IMPLEMENTED (partial language/data-flow coverage; see [SECURITY.md](SECURITY.md)) |
 | Other Security/Taint families, dependency CVE analysis, AI | DEFERRED |
 

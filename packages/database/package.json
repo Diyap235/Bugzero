@@ -11,15 +11,16 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/**/*.test.ts",
-    "migrate": "tsx src/migrate.ts"
+    "migrate": "node --env-file=../../.env.local --import tsx src/migrate.ts"
   },
   "dependencies": {
     "@bugzero/config": "workspace:*",
+    "@bugzero/contracts": "workspace:^",
     "pg": "^8.13.0"
   },
   "devDependencies": {
     "@types/pg": "^8.11.5",
-    "typescript": "^5",
-    "eslint": "^8"
+    "eslint": "^8",
+    "typescript": "^5"
   }
 }

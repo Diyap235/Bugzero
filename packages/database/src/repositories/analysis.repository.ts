@@ -108,7 +108,7 @@ export class AnalysisRepository {
       `INSERT INTO analysis_profiles (id, organization_id, version, analyzers, max_depth)
        VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [input.id, input.organizationId, input.version, input.analyzers, input.maxDepth ?? null],
+      [input.id, input.organizationId, input.version, JSON.stringify(input.analyzers), input.maxDepth ?? null],
     );
 
     return result.rows[0];
@@ -147,7 +147,7 @@ export class AnalysisRepository {
         defaultAnalysisProfile.id,
         organizationId,
         defaultAnalysisProfile.version,
-        defaultAnalysisProfile.analyzers,
+        JSON.stringify(defaultAnalysisProfile.analyzers),
         defaultAnalysisProfile.maxDepth,
       ],
     );

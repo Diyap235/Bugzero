@@ -7,12 +7,10 @@ import { Activity, ArrowUpRight, Play, RefreshCw } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Metric, PageHeading, ResourceState, StatusLabel, UnknownValue, formatDuration, formatTimestamp } from "@/components/product/ui";
 import { useApiResource } from "@/hooks/useApiResource";
-import { bugzeroApi } from "@/lib/api-client";
+import { ApiError, bugzeroApi } from "@/lib/api-client";
 import type { AcceptedAnalysis, AnalysisRunStatusResponse } from "@/domains/product/types";
-import { sampleOverview } from "@/domains/product/sample-data";
 
 const terminalStatuses = new Set(["COMPLETED", "PARTIAL", "FAILED", "UNAVAILABLE"]);
-const demoStages = ["Queued", "Parsing", "Repository intelligence", "Analyzing", "Evidence", "Risk", "Health", "Completed"];
 const stageNames: Record<string, string> = {
   INGESTION: "Ingestion", PARSING: "Parsing", CODE_IR: "Code IR",
   INTELLIGENCE: "Repository intelligence", QUALITY_ANALYSIS: "Quality analysis",
@@ -26,19 +24,20 @@ export default function RepositoryDetailPage() {
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisRunStatusResponse | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [acceptedAnalysis, setAcceptedAnalysis] = useState<AcceptedAnalysis | null>(null);
-  const [demoStageIndex, setDemoStageIndex] = useState<number | null>(null);
   const [requesting, setRequesting] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [pollError, setPollError] = useState(false);
+  const [pollRetry, setPollRetry] = useState(0);
   const load = useCallback(() => bugzeroApi.getRepository(repositoryId), [repositoryId]);
-  const resource = useApiResource(load, sampleOverview);
+  const resource = useApiResource(load);
   const overview = resource.data;
   const refresh = resource.refresh;
 
   useEffect(() => {
-    if (demoStageIndex === null || demoStageIndex >= demoStages.length - 1) return;
-    const timer = setTimeout(() => setDemoStageIndex((current) => current === null ? null : Math.min(current + 1, demoStages.length - 1)), 900);
-    return () => clearTimeout(timer);
-  }, [demoStageIndex]);
+    const latestRun = overview?.latestRun;
+    if (!latestRun || activeRunId || terminalStatuses.has(latestRun.status)) return;
+    setActiveRunId(latestRun.id);
+  }, [activeRunId, overview?.latestRun]);
 
   useEffect(() => {
     if (!activeRunId) return;
@@ -49,6 +48,7 @@ export default function RepositoryDetailPage() {
         const result = await bugzeroApi.getAnalysisStatus(activeRunId);
         if (disposed) return;
         setAnalysisStatus(result);
+        setPollError(false);
         if (terminalStatuses.has(result.status)) {
           setActiveRunId(null);
           refresh();
@@ -57,7 +57,7 @@ export default function RepositoryDetailPage() {
         timer = setTimeout(poll, 1800);
       } catch {
         if (!disposed) {
-          setRequestError("Analysis progress is temporarily unavailable. Please try again.");
+          setPollError(true);
           setActiveRunId(null);
         }
       }
@@ -67,16 +67,9 @@ export default function RepositoryDetailPage() {
       disposed = true;
       if (timer) clearTimeout(timer);
     };
-  }, [activeRunId, refresh]);
+  }, [activeRunId, pollRetry, refresh]);
 
   const startAnalysis = async () => {
-    if (resource.isFallback) {
-      setRequestError(null);
-      setDemoStageIndex(0);
-      setAnalysisStatus(null);
-      setActiveRunId(null);
-      return;
-    }
     if (!overview?.latestCommit) {
       setRequestError("An indexed revision is needed before this repository can be analyzed.");
       return;
@@ -87,9 +80,14 @@ export default function RepositoryDetailPage() {
       const accepted = await bugzeroApi.createAnalysis(repositoryId, overview.latestCommit.commitSha);
       setAcceptedAnalysis(accepted);
       setAnalysisStatus(null);
+      setPollError(false);
       setActiveRunId(accepted.analysisRunId);
-    } catch {
-      setRequestError("Analysis couldn't be started right now. Please try again.");
+    } catch (reason) {
+      setRequestError(reason instanceof ApiError && reason.code === "FORBIDDEN"
+        ? "Your account is not permitted to start an analysis."
+        : reason instanceof ApiError && reason.code === "NOT_FOUND"
+          ? "The repository or indexed commit is no longer available."
+          : "Analysis couldn't be started right now. Please try again.");
     } finally {
       setRequesting(false);
     }
@@ -98,55 +96,38 @@ export default function RepositoryDetailPage() {
   const error = resource.error;
   const health = overview?.latestHealth;
   const dimensions = health?.dimensions;
-  const languages = overview && "languages" in overview.repository && Array.isArray(overview.repository.languages)
-    ? overview.repository.languages.join(" · ")
-    : "";
   const activeStatus = analysisStatus ?? null;
   const state = (
-    <ResourceState loading={resource.loading} error={error} empty={!overview} retry={resource.refresh} sample={resource.isFallback} emptyTitle="Repository not found" />
+    <ResourceState loading={resource.loading} error={error} empty={!overview} retry={resource.refresh} emptyTitle="Repository not found" />
   );
 
   return (
     <AppShell>
       <div className="space-y-6">
         {state}
-        {overview && (!error || resource.isFallback) && (
+        {overview && !error && (
           <>
             <PageHeading
               eyebrow={`${overview.repository.provider} repository`}
               title={overview.repository.fullName}
-              description={`Default branch: ${overview.repository.defaultBranch} · ${resource.isFallback ? `${languages} · Sample repository` : `Added ${formatTimestamp(overview.repository.createdAt)}`}`}
+              description={`Default branch: ${overview.repository.defaultBranch} · ${formatTimestamp(overview.repository.createdAt)}`}
               action={
-                <button onClick={startAnalysis} disabled={requesting || (!resource.isFallback && !overview.latestCommit) || Boolean(activeRunId) || (demoStageIndex !== null && demoStageIndex < demoStages.length - 1)} className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
-                  {requesting || activeRunId || (demoStageIndex !== null && demoStageIndex < demoStages.length - 1) ? <RefreshCw className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
-                  {activeRunId || (demoStageIndex !== null && demoStageIndex < demoStages.length - 1) ? "Analysis running" : requesting ? "Starting…" : "Analyze repository"}
+                <button onClick={startAnalysis} disabled={requesting || !overview.latestCommit || Boolean(activeRunId)} className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                  {requesting || activeRunId ? <RefreshCw className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Play className="h-4 w-4" aria-hidden="true" />}
+                  {activeRunId ? "Analysis running" : requesting ? "Starting…" : "Analyze repository"}
                 </button>
               }
             />
-            {!overview.latestCommit && !resource.isFallback && <div className="rounded-lg border border-amber-800/60 bg-amber-950/20 p-3 text-xs text-amber-100">An indexed revision is needed before this repository can be analyzed.</div>}
+            {!overview.latestCommit && <div className="rounded-lg border border-amber-800/60 bg-amber-950/20 p-3 text-xs text-amber-100">An indexed revision is needed before this repository can be analyzed.</div>}
             {requestError && <div role="alert" className="rounded-lg border border-rose-800/60 bg-rose-950/20 p-3 text-sm text-rose-100">{requestError}</div>}
 
-            {demoStageIndex !== null && (
-              <section aria-live="polite" className="rounded-xl border border-primary/40 bg-primary/5 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div><p className="text-sm font-semibold text-white">Sample analysis</p><p className="mt-1 text-xs text-text-muted">Demonstration progress through the BugZero analysis workflow.</p></div>
-                  <StatusLabel value={demoStageIndex === demoStages.length - 1 ? "COMPLETED" : "RUNNING"} />
-                </div>
-                <ol className="mt-4 grid gap-2 sm:grid-cols-4">
-                  {demoStages.map((stage, index) => (
-                    <li key={stage} className={`rounded-lg border px-3 py-2 text-xs ${index <= demoStageIndex ? "border-primary/50 bg-primary/10 text-white" : "border-border bg-background text-text-muted"}`}>
-                      <span className="mr-2 font-mono text-[10px]">{String(index + 1).padStart(2, "0")}</span>{stage}
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            )}
-
-            {(activeRunId || activeStatus) && (
+            {(activeRunId || activeStatus || acceptedAnalysis) && (
               <section aria-live="polite" className="rounded-xl border border-primary/40 bg-primary/5 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div><p className="text-sm font-semibold text-white">Analysis {activeStatus?.analysisRunId ?? acceptedAnalysis?.analysisRunId}</p><p className="mt-1 text-xs text-text-muted">Current workflow stage and recorded progress.</p></div>
-                  <StatusLabel value={activeStatus?.status ?? `ACCEPTED · ${acceptedAnalysis?.status ?? "WAITING"}`} />
+                  <StatusLabel value={activeStatus?.status === "NOT_STARTED"
+                    ? activeStatus.job?.status === "QUEUED" || activeStatus.job?.status === "RETRY" ? "QUEUED" : activeStatus.status
+                    : activeStatus?.status ?? acceptedAnalysis?.status ?? "QUEUED"} />
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   <Metric label="Current stage" value={activeStatus?.job?.stage ? stageNames[activeStatus.job.stage] ?? activeStatus.job.stage : "Awaiting status response"} />
@@ -154,6 +135,7 @@ export default function RepositoryDetailPage() {
                   <Metric label="Duration" value={formatDuration(activeStatus?.startedAt, activeStatus?.completedAt)} />
                 </div>
                 {activeStatus?.failure && <p className="mt-3 text-sm text-rose-200">{activeStatus.failure}</p>}
+                {pollError && <div role="alert" className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-800/60 bg-amber-950/20 p-3 text-xs text-amber-100"><span>Analysis status could not be refreshed. The job may still be running.</span><button onClick={() => { setPollError(false); setPollRetry((value) => value + 1); setActiveRunId(acceptedAnalysis?.analysisRunId ?? activeStatus?.analysisRunId ?? null); }} className="underline">Retry status</button></div>}
                 {activeStatus?.progress && Object.keys(activeStatus.progress).length > 0 && (
                   <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-3">
                     {(["sourceFiles", "parsedFiles", "irEntityCount", "irRelationshipCount", "findings"] as const).map((key) => {
@@ -164,7 +146,7 @@ export default function RepositoryDetailPage() {
                 )}
               </section>
             )}
-            {!activeStatus && demoStageIndex === null && (
+            {!activeStatus && (
               <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <Metric label="Current commit" value={overview.latestCommit?.commitSha.slice(0, 12) ?? "Not indexed"} detail={overview.latestCommit?.indexedAt ? `Indexed ${formatTimestamp(overview.latestCommit.indexedAt)}` : "No indexed revision yet"} />
                 <Metric label="Latest analysis" value={overview.latestRun?.status ?? "Not run"} detail={formatTimestamp(overview.latestRun?.createdAt)} />

@@ -22,6 +22,10 @@ async function main(): Promise<void> {
 
 void main().catch((error: unknown) => {
   const errorName = error instanceof Error ? error.name : 'UnknownError';
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  const errorStack = error instanceof Error ? error.stack : undefined;
   console.error(`BugZero API startup failed (${errorName})`);
+  console.error(`Message: ${errorMessage}`);
+  console.error(`Stack: ${errorStack ?? 'Unavailable'}`);
   process.exitCode = 1;
 });

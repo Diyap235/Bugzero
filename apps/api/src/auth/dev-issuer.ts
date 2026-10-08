@@ -2,16 +2,14 @@ import { generateKeyPairSync, createPrivateKey, createPublicKey } from 'node:cry
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { importPKCS8, SignJWT } from 'jose';
-
+import { fileURLToPath } from 'node:url';
 const issuer = 'bugzero-auth';
 const audience = 'bugzero-api';
 const authDirectory = join(homedir(), '.bugzero', 'dev-auth');
 const privateKeyPath = join(authDirectory, 'ed25519-private.pem');
 const envPath = resolve(process.cwd(), '..', '..', '.env.local');
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function ensurePrivateKey(): Promise<string> {
+export async function ensurePrivateKey(): Promise<string> {
   await mkdir(authDirectory, { recursive: true, mode: 0o700 });
 
   try {
@@ -65,56 +63,16 @@ async function configureLocalEnvironment(): Promise<void> {
   console.log(`Development Ed25519 private key stored outside the repository at ${privateKeyPath}`);
 }
 
-async function issueToken(args: string[]): Promise<void> {
-  const options = new Map<string, string>();
-  for (let index = 0; index < args.length; index += 2) {
-    const name = args[index];
-    const value = args[index + 1];
-    if (!name?.startsWith('--') || !value || options.has(name)) {
-      throw new Error('Usage: dev-auth:token -- --sub <user-uuid> --org <organization-uuid> [--expires-in-seconds <1-86400>]');
-    }
-    options.set(name, value);
+async function main(): Promise<void> {
+  const [command, ...args] = process.argv.slice(2);
+  if (command === 'setup') {
+    if (args.length > 0) throw new Error('Usage: dev-auth:setup');
+    await configureLocalEnvironment();
+  } else {
+    throw new Error('Expected command "setup"');
   }
-
-  const subject = options.get('--sub');
-  const organization = options.get('--org');
-  const lifetime = Number(options.get('--expires-in-seconds') ?? '900');
-  if (!subject || !uuidPattern.test(subject) || !organization || !uuidPattern.test(organization)) {
-    throw new Error('Both --sub and --org must be UUIDs from existing BugZero development identities');
-  }
-  if (!Number.isSafeInteger(lifetime) || lifetime < 1 || lifetime > 86_400) {
-    throw new Error('--expires-in-seconds must be an integer from 1 to 86400');
-  }
-  for (const name of options.keys()) {
-    if (!['--sub', '--org', '--expires-in-seconds'].includes(name)) {
-      throw new Error(`Unknown option: ${name}`);
-    }
-  }
-
-  const privateKeyPem = await readFile(privateKeyPath, 'utf8');
-  const privateKey = createPrivateKey(privateKeyPem);
-  if (privateKey.asymmetricKeyType !== 'ed25519') {
-    throw new Error(`Development private key at ${privateKeyPath} is not Ed25519`);
-  }
-
-  const issuedAt = Math.floor(Date.now() / 1000);
-  const signingKey = await importPKCS8(privateKeyPem, 'EdDSA');
-  const token = await new SignJWT({ org: organization })
-    .setProtectedHeader({ alg: 'EdDSA', typ: 'JWT' })
-    .setSubject(subject)
-    .setIssuer(issuer)
-    .setAudience(audience)
-    .setIssuedAt(issuedAt)
-    .setExpirationTime(issuedAt + lifetime)
-    .sign(signingKey);
-  console.log(token);
 }
 
-const [command, ...args] = process.argv.slice(2);
-if (command === 'setup') {
-  await configureLocalEnvironment();
-} else if (command === 'token') {
-  await issueToken(args);
-} else {
-  throw new Error('Expected command "setup" or "token"');
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  await main();
 }

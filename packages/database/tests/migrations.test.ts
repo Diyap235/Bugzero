@@ -18,6 +18,10 @@ test('canonical SQL migrations are loaded in numeric order with stable checksums
     '0005_versioned_evidence_graph.sql',
     '0006_deterministic_risk_assessments.sql',
     '0007_repository_health_v1.sql',
+    '0008_local_repository_snapshots.sql',
+    '0009_account_onboarding.sql',
+    '0010_ai_investigation_results.sql',
+    '0011_remove_auth_refresh_sessions.sql',
   ]);
   assert.ok(migrations.every((migration) => /^[a-f0-9]{64}$/.test(migration.checksum)));
   assert.ok(migrations.every((migration) => !/^BEGIN;/i.test(migration.sql)));

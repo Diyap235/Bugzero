@@ -10,8 +10,7 @@
   "scripts": {
     "dev": "node --env-file=../../.env.local --import tsx --watch src/start.ts",
     "dev-auth:setup": "tsx src/auth/dev-issuer.ts setup",
-    "dev-auth:token": "tsx src/auth/dev-issuer.ts token",
-    "start": "tsx src/start.ts",
+    "start": "node --env-file=../../.env.local --import tsx src/start.ts",
     "build": "tsc --noEmit",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -25,10 +24,12 @@
     "fastify": "^5.0.0",
     "ioredis": "^5.0.0",
     "jose": "^6.2.12",
+    "yauzl": "^3.4.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/yauzl": "^3.4.0",
     "eslint": "^8",
     "tsx": "^4.19.1",
     "typescript": "^5"

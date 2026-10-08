@@ -1,7 +1,9 @@
+import type { AIInvestigationRecord } from '@bugzero/contracts';
+
 export interface ApiRepository {
   id: string;
   organizationId: string;
-  provider: 'GITHUB';
+  provider: 'GITHUB' | 'LOCAL';
   externalId: string;
   fullName: string;
   defaultBranch: string;
@@ -243,6 +245,13 @@ export interface FindingRow {
 }
 
 export interface FindingDetail {
+  title?: string;
+  description?: string | null;
+  location?: {
+    filePath: string | null;
+    startLine: number | null;
+    endLine: number | null;
+  } | null;
   finding: ApiFinding;
   occurrence: ApiOccurrence | null;
   evidence: {
@@ -251,6 +260,34 @@ export interface FindingDetail {
     edges: ApiEvidenceEdge[];
   } | null;
   risks: ApiRiskAssessment[];
+  aiInvestigations: AIInvestigationRecord[];
+  risk?: ApiRiskAssessment | null;
+  aiInvestigationStatus?: 'NOT_REQUESTED' | 'UNAVAILABLE' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | null;
+  mlSignalStatus?: 'AVAILABLE' | 'UNAVAILABLE' | 'NOT_APPLICABLE' | null;
+  mlSignal?: {
+    classification: 'INVESTIGATIVE';
+    modelVersion: string;
+    label: 'safe' | 'vulnerable';
+    score: number;
+    timestamp: string | null;
+    function: {
+      functionName: string | null;
+      filePath: string;
+      startLine: number;
+      endLine: number;
+    };
+  } | null;
+  aiExplanation?: {
+    classification: 'EXPLANATORY';
+    provider: 'GROQ' | null;
+    model: string | null;
+    status: 'PENDING' | 'COMPLETED' | 'FAILED' | null;
+    summary: string | null;
+    explanation: string | null;
+    attackPath: string[];
+    reasoningStatus: 'SUPPORTED' | 'INVESTIGATIVE' | 'INSUFFICIENT_EVIDENCE' | null;
+  } | null;
+  recommendedFix?: string[] | null;
 }
 
 export interface RepositoryHistoryEntry {
@@ -264,6 +301,17 @@ export interface RepositoryHistoryEntry {
 export interface HealthHistoryEntry {
   snapshot: ApiHealthSnapshot;
   commitSha: string | null;
+}
+
+export interface ApiReport {
+  id: string;
+  organizationId: string;
+  repositoryId: string;
+  analysisRunId: string;
+  createdByUserId: string | null;
+  format: "JSON" | "PDF" | "HTML";
+  metadata: Record<string, unknown>;
+  createdAt: string;
 }
 
 export type AnalysisStatus = AnalysisRunStatusResponse;

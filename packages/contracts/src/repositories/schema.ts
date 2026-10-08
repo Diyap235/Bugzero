@@ -29,6 +29,14 @@ export const OnboardGitHubRepositoryRequestSchema = z.object({
     .regex(/^[A-Za-z0-9_.-]{1,39}\/[A-Za-z0-9_.-]{1,100}$/, 'Expected a GitHub owner/repository name'),
 }).strict();
 
+export const LocalRepositoryUploadResponseSchema = z.object({
+  repository: RepositorySchema,
+  revision: RepositoryRevisionSchema,
+  filesPersisted: z.number().int().positive(),
+  totalBytes: z.number().int().nonnegative(),
+  languages: z.array(z.string().min(1)),
+});
+
 export const RepositoryFileSchema = z.object({
   id: UUID,
   organizationId: UUID,
@@ -50,5 +58,6 @@ export const AnalysisProfileSchema = z.object({
 
 export type Repository = z.infer<typeof RepositorySchema>;
 export type RepositoryRevision = z.infer<typeof RepositoryRevisionSchema>;
+export type LocalRepositoryUploadResponse = z.infer<typeof LocalRepositoryUploadResponseSchema>;
 export type RepositoryFile = z.infer<typeof RepositoryFileSchema>;
 export type AnalysisProfile = z.infer<typeof AnalysisProfileSchema>;

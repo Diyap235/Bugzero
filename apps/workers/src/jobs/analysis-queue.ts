@@ -10,8 +10,11 @@ export interface AnalysisAttemptContext {
   maxAttempts: number;
 }
 
-export function createAnalysisQueue(connection: ConnectionOptions): Queue<AnalysisQueuePayload> {
-  return new Queue<AnalysisQueuePayload>(analysisQueueName, { connection });
+export function createAnalysisQueue(
+  connection: ConnectionOptions,
+  queueName = analysisQueueName,
+): Queue<AnalysisQueuePayload> {
+  return new Queue<AnalysisQueuePayload>(queueName, { connection });
 }
 
 export async function enqueueAnalysisJob(
@@ -51,9 +54,10 @@ export async function processAnalysisQueuePayload(
 export function createAnalysisQueueWorker(
   connection: WorkerOptions['connection'],
   processor: (payload: AnalysisQueuePayload, attempt: AnalysisAttemptContext) => Promise<unknown>,
+  queueName = analysisQueueName,
 ): Worker<AnalysisQueuePayload> {
   return new Worker<AnalysisQueuePayload>(
-    analysisQueueName,
+    queueName,
     async (job) => withOrganizationContext(job.data.organizationId, async () => {
       const maxAttempts = typeof job.opts.attempts === 'number' ? job.opts.attempts : 1;
       return processAnalysisQueuePayload(job.data, processor, {

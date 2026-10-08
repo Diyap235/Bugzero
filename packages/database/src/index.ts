@@ -6,6 +6,7 @@ export * from './types/database.js';
 
 export * from './repositories/organizations.repository.js';
 export * from './repositories/users.repository.js';
+export * from './repositories/auth.repository.js';
 export * from './repositories/members.repository.js';
 export * from './repositories/repositories.repository.js';
 export * from './repositories/commits.repository.js';
@@ -20,3 +21,4 @@ export * from './repositories/dependencies.repository.js';
 export * from './repositories/health.repository.js';
 export * from './repositories/reports.repository.js';
 export * from './repositories/audit.repository.js';
+export * from './repositories/ai-investigations.repository.js';

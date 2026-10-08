@@ -2,10 +2,15 @@ import { createHash } from 'node:crypto';
 
 import {
   analysisRepository,
+  aiInvestigationRepository,
   codeEntityRepository,
   codeRelationshipRepository,
   commitsRepository,
+  evidenceRepository,
+  findingsRepository,
+  repositoryFilesRepository,
   repositoriesRepository,
+  type AIInvestigationRepository,
   type AnalysisRepository,
   type AnalysisJob,
   type AnalysisRun,
@@ -13,9 +18,12 @@ import {
   type CodeRelationshipRecord,
   type CodeRelationshipRepository,
   type CommitRepository,
+  type EvidenceRepository,
+  type FindingRepository,
   type RepositoryRepository,
   type RepositoryRecord,
   type RepositoryCommit,
+  type RepositoryFileRepository,
   type HealthRepository,
 } from '@bugzero/database';
 
@@ -29,6 +37,10 @@ import { detectLanguageFromPath, isExcludedPath, isGeneratedFile, normalizeRepos
 import { normalizeLanguage, parseWithLanguageAdapter } from '../parser/language-adapters.js';
 import { healthRepository } from '@bugzero/database';
 import { repositoryHealthEngine } from '../health/health-engine.js';
+import { createGroqInvestigator } from '../ai/groq/groq-client.js';
+import { investigatePersistedFindings } from '../ai/groq/groq-investigator.js';
+import type { AIInvestigator } from '../ai/groq/groq-types.js';
+import { mlSignalAdapter, type MLFunctionInput, type MLSignalReport, MAX_ML_FUNCTION_BYTES } from '../ml/ml-signal-adapter.js';
 
 const DEFAULT_ANALYSIS_RESOURCE_BUDGET = {
   maxFiles: 2_000,
@@ -174,6 +186,38 @@ export class GitCommitSourceProvider implements AnalysisSourceProvider {
   }
 }
 
+export class RepositorySourceProvider implements AnalysisSourceProvider {
+  constructor(
+    private readonly github = new GitCommitSourceProvider({ token: process.env.GITHUB_TOKEN }),
+    private readonly localFiles: Pick<RepositoryFileRepository, 'listByCommit'> = repositoryFilesRepository,
+  ) {}
+
+  async readCommit(repository: RepositoryRecord, commit: RepositoryCommit): Promise<AnalysisSourceFile[]> {
+    if (repository.provider === 'GITHUB') {
+      return this.github.readCommit(repository, commit);
+    }
+    if (repository.provider !== 'LOCAL') {
+      throw new Error(`Analysis does not support repository provider ${repository.provider}`);
+    }
+
+    const files = await this.localFiles.listByCommit(repository.organization_id, repository.id, commit.id);
+    if (files.length === 0) throw new Error('The local repository snapshot contains no persisted source files');
+    return files.map((file) => {
+      if (file.source_content === null) {
+        throw new Error(`The local repository snapshot is missing source content for ${file.path}`);
+      }
+      const bytes = Buffer.from(file.source_content, 'utf8');
+      if (
+        bytes.length !== Number(file.size_bytes)
+        || createHash('sha256').update(bytes).digest('hex') !== file.content_sha256
+      ) {
+        throw new Error(`The persisted source content failed integrity verification for ${file.path}`);
+      }
+      return { path: file.path, content: file.source_content };
+    });
+  }
+}
+
 export interface ProcessAnalysisJobInput {
   organizationId: string;
   jobId: string;
@@ -190,6 +234,11 @@ export interface AnalysisJobProcessorDependencies {
   impact: Pick<ImpactAnalysisEngine, 'analyzeImpact'>;
   orchestrator: Pick<AnalyzerOrchestrator, 'execute'>;
   health?: Pick<HealthRepository, 'createOrGetSnapshot'>;
+  aiInvestigator: AIInvestigator;
+  findings: Pick<FindingRepository, 'getById' | 'getOccurrencesForFinding'>;
+  evidence: Pick<EvidenceRepository, 'getEvidenceForFinding' | 'getSnapshot'>;
+  aiInvestigations: Pick<AIInvestigationRepository, 'getByIdempotencyKey' | 'createOrGet'>;
+  mlSignals: Pick<typeof mlSignalAdapter, 'predictFunctions'>;
   sources: AnalysisSourceProvider;
 }
 
@@ -207,7 +256,12 @@ export class AnalysisJobProcessor {
       impact: dependencies.impact ?? new ImpactAnalysisEngine(),
       orchestrator: dependencies.orchestrator ?? analyzerOrchestrator,
       health: dependencies.health,
-      sources: dependencies.sources ?? new GitCommitSourceProvider({ token: process.env.GITHUB_TOKEN }),
+      aiInvestigator: dependencies.aiInvestigator ?? createGroqInvestigator(),
+      findings: dependencies.findings ?? findingsRepository,
+      evidence: dependencies.evidence ?? evidenceRepository,
+      aiInvestigations: dependencies.aiInvestigations ?? aiInvestigationRepository,
+      mlSignals: dependencies.mlSignals ?? mlSignalAdapter,
+      sources: dependencies.sources ?? new RepositorySourceProvider(),
     };
   }
 
@@ -531,6 +585,78 @@ export class AnalysisJobProcessor {
         errorName: error instanceof Error ? error.name : 'UnknownError',
       });
     }
+    let mlSignals: MLSignalReport;
+    try {
+      const candidates: MLFunctionInput[] = [];
+      for (const entity of intelligence.entities) {
+        if (
+          !['FUNCTION', 'METHOD'].includes(entity.entity_type)
+          || entity.provenance.language !== 'Python'
+          || !entity.file_path
+          || entity.start_line === null
+          || entity.end_line === null
+        ) continue;
+        const inScope = scope.mode === 'FULL'
+          || (scope.mode === 'FILE' && (scope.fileIds ?? []).includes(entity.file_path))
+          || (scope.mode === 'ENTITY' && (scope.entityIds ?? []).includes(entity.id))
+          || (scope.mode === 'IMPACTED' && (
+            (scope.entityIds ?? []).includes(entity.id)
+            || (scope.fileIds ?? []).includes(entity.file_path)
+          ));
+        if (!inScope) continue;
+        candidates.push({
+          functionId: entity.id,
+          functionName: entity.qualified_name ?? entity.name,
+          filePath: entity.file_path,
+          startLine: entity.start_line,
+          endLine: entity.end_line,
+          source: sourceAccess.getLineRange(
+            entity.file_path,
+            entity.start_line,
+            entity.end_line,
+          ).join('\n'),
+        });
+      }
+      mlSignals = await this.dependencies.mlSignals.predictFunctions(candidates);
+      if (candidates.some((candidate) => Buffer.byteLength(candidate.source, 'utf8') > MAX_ML_FUNCTION_BYTES)) {
+        logAnalysisEvent('analysis.ml.functions_skipped', {
+          organizationId: input.organizationId,
+          jobId: job.id,
+          analysisRunId: run.id,
+          oversizedFunctions: mlSignals.oversizedFunctionsSkipped,
+        });
+      }
+    } catch {
+      mlSignals = {
+        status: 'UNAVAILABLE',
+        signals: [],
+        functionsConsidered: 0,
+        functionsScored: 0,
+        duplicateFunctionsAvoided: 0,
+        oversizedFunctionsSkipped: 0,
+        errorCode: 'INFERENCE_FAILED',
+      };
+    }
+    logAnalysisEvent('analysis.ml.completed', {
+      organizationId: input.organizationId,
+      jobId: job.id,
+      analysisRunId: run.id,
+      status: mlSignals.status,
+      functionsScored: mlSignals.functionsScored,
+    });
+    const aiInvestigation = await investigatePersistedFindings({
+      organizationId: input.organizationId,
+      repositoryId: run.repository_id,
+      commitId: run.commit_id,
+      analysisRunId: run.id,
+      analysisStatus: status,
+      findingIds: analyzerResult.findingIds,
+      sourceAccess,
+      investigator: this.dependencies.aiInvestigator,
+      findings: this.dependencies.findings,
+      evidence: this.dependencies.evidence,
+      investigations: this.dependencies.aiInvestigations,
+    });
     const coverage = {
       ...run.coverage,
       pipeline: {
@@ -561,7 +687,9 @@ export class AnalysisJobProcessor {
         findings: analyzerResult.findingIds.length,
         evidence: analyzerResult.evidenceMetrics,
         risk: analyzerResult.riskMetrics,
+        mlSignals,
         health,
+        aiInvestigation,
       },
     };
     await this.dependencies.analysis.updateRunStatus(input.organizationId, run.id, status, coverage);

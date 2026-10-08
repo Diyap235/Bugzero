@@ -1,0 +1,49 @@
+{
+  "model_version": "v1",
+  "created_utc": "2026-10-08T10:59:37.028856+00:00",
+  "python_version": "3.11.3",
+  "numpy_version": "2.2.6",
+  "scikit_learn_version": "1.9.1",
+  "torch_version": "2.7.1+cpu",
+  "transformers_version": "4.53.2",
+  "dataset_file": "bugzero_dataset.csv",
+  "dataset_sha256": "7316bb850d9bbcec4fae7945b3d681d9f7ac1644d301dbda2a7e79d8995da327",
+  "dataset_samples": 3585,
+  "training_samples": 2878,
+  "held_out_test_samples": 707,
+  "split": {
+    "column": "split",
+    "test_value": "test",
+    "validation": "StratifiedGroupKFold(n_splits=5, shuffle=True, random_state=42), first fold",
+    "cross_validation": "GroupKFold(n_splits=5) on training projects",
+    "group_column": "repo",
+    "test_used_for_tuning": false
+  },
+  "preprocessing": {
+    "method": "collapse consecutive whitespace with ' '.join(code.split())",
+    "tokenizer_padding": "longest in batch",
+    "truncation": true,
+    "max_token_length": 512,
+    "embedding_pooling": "attention-mask-weighted mean of last_hidden_state"
+  },
+  "encoder": {
+    "model_id": "microsoft/codebert-base",
+    "revision": "3b0952feddeffad0063f274080e3c23d75e7eb39",
+    "feature_dimension": 768
+  },
+  "classifier": {
+    "type": "sklearn.linear_model.LogisticRegression",
+    "C": 0.0003,
+    "class_weight": "balanced",
+    "max_iter": 3000
+  },
+  "label_mapping": {
+    "safe": 0,
+    "vulnerable": 1
+  },
+  "inference_threshold": 0.5,
+  "artifact_files": [
+    "classifier.joblib",
+    "scaler.joblib"
+  ]
+}

@@ -403,7 +403,7 @@ export default function LandingPage() {
             <Link href="/login" className="hidden sm:inline-flex items-center h-9 px-4 text-sm font-medium text-[#AAB5AF] hover:text-white transition-colors rounded-xl">
               Sign in
             </Link>
-            <Link href="/login">
+            <Link href="/signup">
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
@@ -467,13 +467,13 @@ export default function LandingPage() {
                   Enter the workspace
                 </motion.button>
               </Link>
-              <Link href="/login">
+              <Link href="/signup">
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.97 }}
                   className="flex items-center gap-2.5 h-14 px-8 border border-[#1E3025] hover:border-[#294134] hover:bg-[#16211B] text-white text-[15px] font-semibold rounded-xl transition-all"
                 >
-                  Investigate a finding
+                  Sign in to your workspace
                 </motion.button>
               </Link>
             </motion.div>
@@ -1122,8 +1122,8 @@ export default function LandingPage() {
                 a: "Evidence records expose their authority, provenance, sufficiency, completeness, paths, and diagnostics. Incomplete or unresolved flows are not presented as sufficient." },
               { q: "Why do some health dimensions say Unknown?",
                 a: "A dimension is shown as unknown when an assessment is not available; BugZero does not substitute a made-up score." },
-              { q: "What is Sample data?",
-                a: "When a live repository is not available, BugZero keeps the workspace usable with a clearly labeled demonstration repository and sample records." },
+              { q: "How do I add a repository?",
+                a: "Create an account, open your workspace, and upload a .zip codebase. BugZero analyzes the uploaded source and shows results from that analysis." },
             ].map((faq) => (
               <FadeIn key={faq.q}>
                 <FAQItem q={faq.q} a={faq.a} />
@@ -1159,14 +1159,14 @@ export default function LandingPage() {
               </div>
 
               <div className="relative flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Link href="/login">
+                <Link href="/signup">
                   <motion.button
                     whileHover={{ scale: 1.03, boxShadow: "0 0 40px rgba(46,125,50,0.4)" }}
                     whileTap={{ scale: 0.97 }}
                     className="flex items-center gap-2.5 h-14 px-10 bg-[#2E7D32] hover:bg-[#388E3C] text-white text-[15px] font-bold rounded-xl transition-all"
                   >
                     <Play className="w-4 h-4" />
-                    Enter the workspace
+                    Create your account
                     <ArrowRight className="w-4 h-4" />
                   </motion.button>
                 </Link>

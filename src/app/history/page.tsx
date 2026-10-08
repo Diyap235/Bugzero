@@ -7,9 +7,10 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Metric, PageHeading, ResourceState, StatusLabel, formatDuration, formatTimestamp } from "@/components/product/ui";
 import { useApiResource } from "@/hooks/useApiResource";
 import { bugzeroApi } from "@/lib/api-client";
-import { sampleRepository, sampleRepositoryHistory } from "@/domains/product/sample-data";
 
-const sampleHistoryData = [{ repository: sampleRepository, runs: sampleRepositoryHistory }];
+function humanize(value: string | null | undefined): string {
+  return value?.replaceAll("_", " ").toLowerCase().replace(/^\w/, (character) => character.toUpperCase()) ?? "Not reported";
+}
 
 function HistoryContent() {
   const params = useSearchParams();
@@ -21,10 +22,10 @@ function HistoryContent() {
       repository,
       runs: await bugzeroApi.getRepositoryHistory(repository.id),
     })));
-    return histories.some(({ runs }) => runs.length > 0) ? histories : [];
+    return histories;
   }, []);
-  const resource = useApiResource(load, sampleHistoryData);
-  const all = resource.data ?? sampleHistoryData;
+  const resource = useApiResource(load);
+  const all = useMemo(() => resource.data ?? [], [resource.data]);
   const selectedId = all.some(({ repository }) => repository.id === repositoryId) ? repositoryId : "ALL";
   const runs = useMemo(() => all.filter(({ repository }) => selectedId === "ALL" || repository.id === selectedId)
     .flatMap(({ repository, runs: items }) => items.map((entry) => ({ ...entry, repository })))
@@ -37,8 +38,8 @@ function HistoryContent() {
     <AppShell>
       <div className="space-y-5">
         <PageHeading eyebrow="Immutable analysis runs" title="Analysis history" description="Run status, stage, finding counts, health snapshot, and risk totals are derived from persisted records." />
-        <ResourceState loading={resource.loading} error={resource.error} empty={all.length === 0} retry={resource.refresh} sample={resource.isFallback} emptyTitle="No repositories are available" />
-        {(!resource.error || resource.isFallback) && all.length > 0 && (
+        <ResourceState loading={resource.loading} error={resource.error} empty={all.length === 0} retry={resource.refresh} emptyTitle="No repositories are available" />
+        {!resource.error && all.length > 0 && (
           <>
             <div className="grid gap-3 sm:grid-cols-3"><Metric label="Completed" value={complete} /><Metric label="Partial" value={partial} tone={partial ? "warning" : "neutral"} /><Metric label="Failed" value={failed} tone={failed ? "danger" : "neutral"} /></div>
             <label className="block max-w-md text-[10px] uppercase tracking-wide text-text-muted">Repository<select value={selectedId} onChange={(event) => setRepositoryId(event.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-white"><option value="ALL">All repositories</option>{all.map(({ repository }) => <option key={repository.id} value={repository.id}>{repository.fullName}</option>)}</select></label>
@@ -51,12 +52,12 @@ function HistoryContent() {
                       <td className="px-4 py-3"><Link href={`/analysis/${run.id}`} className="block max-w-56 truncate text-xs font-medium text-white hover:text-primary">{repository.fullName}</Link><span className="mt-1 block font-mono text-[10px] text-text-muted">{run.commitSha ?? run.commitId}</span></td>
                       <td className="px-4 py-3 text-[10px] text-text-muted">{formatTimestamp(run.startedAt ?? run.createdAt)}</td>
                       <td className="px-4 py-3"><StatusLabel value={run.status} /></td>
-                      <td className="px-4 py-3 text-[10px] text-text-secondary">{job?.stage ?? "Not reported"}</td>
+                      <td className="px-4 py-3 text-[10px] text-text-secondary">{humanize(job?.stage)}</td>
                       <td className="px-4 py-3 font-mono text-[10px] text-text-secondary">{formatDuration(run.startedAt, run.completedAt)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-white">{findingCount}</td>
                       <td className="px-4 py-3 font-mono text-xs text-white">{totalTechnicalRisk}</td>
                       <td className="px-4 py-3 font-mono text-xs text-white">{healthScore ?? "Unknown"}</td>
-                      <td className="px-4 py-3 text-[10px] text-text-secondary">{run.scope}</td>
+                      <td className="px-4 py-3 text-[10px] text-text-secondary">{humanize(run.scope)}</td>
                     </tr>
                   ))}
                   {runs.length === 0 && <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-text-muted">No analysis runs are recorded for this selection.</td></tr>}

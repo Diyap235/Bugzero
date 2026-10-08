@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import path from 'node:path';
 
 import ts from 'typescript';
 import type { CodeEntityRecord, CodeRelationshipRecord } from '@bugzero/database';
@@ -43,6 +44,13 @@ interface FlowValue {
 interface FunctionUnit {
   entity: CodeEntityRecord;
   node: ts.FunctionLikeDeclaration;
+  localBindings: Set<string>;
+}
+
+interface ResolvedFunctionCall {
+  analyzer: SqlInjectionFileAnalyzer;
+  unit: FunctionUnit;
+  relationshipId: string;
 }
 
 interface FileAnalysisState {
@@ -50,6 +58,8 @@ interface FileAnalysisState {
   source: ts.SourceFile;
   functionEntitiesByName: Map<string, FunctionUnit[]>;
   exactCalls: Map<string, CodeRelationshipRecord>;
+  importedFunctions: Map<string, ResolvedFunctionCall>;
+  localBindingsByEntityId: Map<string, Set<string>>;
   diagnostics: string[];
   findings: FindingCandidate[];
   taintNodes: number;
@@ -59,6 +69,17 @@ interface FileAnalysisState {
   startedAt: number;
   budgetExhausted: boolean;
   seenSinks: Set<string>;
+}
+
+interface TypeScriptModuleAnalysis {
+  filePath: string;
+  source: ts.SourceFile;
+  moduleEntity?: CodeEntityRecord;
+  functionsById: Map<string, FunctionUnit>;
+  exportedFunctions: Map<string, FunctionUnit[]>;
+  importedBindings: Map<string, { importedName: string; moduleSpecifier: string }>;
+  state: FileAnalysisState;
+  analyzer: SqlInjectionFileAnalyzer;
 }
 
 interface SecurityLimits {
@@ -81,8 +102,92 @@ function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function stableId(value: string): string {
+  const bytes = createHash('sha256').update(value).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function normalizeRepositoryPath(filePath: string): string | null {
+  const normalized = path.posix.normalize(filePath.replace(/\\/g, '/').replace(/^\.\/+/, ''));
+  if (!normalized || normalized === '.' || normalized === '..' || normalized.startsWith('../') || normalized.startsWith('/')) {
+    return null;
+  }
+  return normalized;
+}
+
+export function resolveRelativeImportPath(
+  importingFile: string,
+  moduleSpecifier: string,
+  availableFiles: Iterable<string>,
+): string | null {
+  const normalizedImporter = normalizeRepositoryPath(importingFile);
+  const specifier = moduleSpecifier.replace(/\\/g, '/');
+  if (!normalizedImporter || (!specifier.startsWith('./') && !specifier.startsWith('../'))) return null;
+
+  const basePath = path.posix.normalize(path.posix.join(path.posix.dirname(normalizedImporter), specifier));
+  if (basePath === '..' || basePath.startsWith('../') || basePath.startsWith('/')) return null;
+
+  const candidates = path.posix.extname(basePath)
+    ? [basePath]
+    : [
+      basePath,
+      `${basePath}.ts`,
+      `${basePath}.tsx`,
+      `${basePath}.js`,
+      `${basePath}.jsx`,
+      path.posix.join(basePath, 'index.ts'),
+      path.posix.join(basePath, 'index.js'),
+    ];
+  const repositoryFiles = new Set(Array.from(availableFiles, normalizeRepositoryPath).filter((file): file is string => file !== null));
+  return candidates.find((candidate) => repositoryFiles.has(candidate)) ?? null;
+}
+
 function lineAt(source: ts.SourceFile, node: ts.Node): number {
   return source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+}
+
+function collectLocalBindings(node: ts.FunctionLikeDeclaration): Set<string> {
+  const bindings = new Set<string>();
+  for (const parameter of node.parameters) {
+    if (ts.isIdentifier(parameter.name)) bindings.add(parameter.name.text);
+  }
+  if (!node.body) return bindings;
+  const collect = (child: ts.Node): void => {
+    if (child !== node.body && isFunctionLike(child)) return;
+    if (ts.isVariableDeclaration(child) && ts.isIdentifier(child.name)) bindings.add(child.name.text);
+    if (ts.isFunctionDeclaration(child) && child.name) bindings.add(child.name.text);
+    ts.forEachChild(child, collect);
+  };
+  collect(node.body);
+  return bindings;
+}
+
+function functionExportNames(node: ts.Node, name: string): string[] {
+  let declaration = node;
+  if (ts.isFunctionExpression(node) || ts.isArrowFunction(node)) {
+    const variable = node.parent;
+    const declarationList = ts.isVariableDeclaration(variable) ? variable.parent : undefined;
+    const statement = declarationList && ts.isVariableDeclarationList(declarationList)
+      ? declarationList.parent
+      : undefined;
+    declaration = statement ?? node;
+  }
+  if (!ts.canHaveModifiers(declaration)) return [];
+  const modifiers = ts.getModifiers(declaration) ?? [];
+  if (!modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) return [];
+  return modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword) ? ['default'] : [name];
+}
+
+function staticPropertyName(name: ts.PropertyName): string | null {
+  if (ts.isIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
+  return null;
+}
+
+function createImportRelationshipId(sourceEntityId: string, targetEntityId: string, importerPath: string, importedName: string): string {
+  return stableId(`${sourceEntityId}:IMPORT_CALL:${targetEntityId}:${importerPath}:${importedName}`);
 }
 
 function statementLooksSql(value: string): boolean {
@@ -403,56 +508,71 @@ class SqlInjectionFileAnalyzer {
       if (query.tainted && query.dynamicSql && !query.unknown && query.path) {
         this.addFinding(sink, query, call, caller);
       } else if (query.tainted && (query.unknown || !query.dynamicSql)) {
-        this.state.diagnostics.push(`SQL sink has tainted or unresolved input without a fully proven dynamic SQL path at ${this.state.filePath}:${lineAt(this.state.source, call)}`);
+        this.state.diagnostics.push(query.unknown
+          ? `UNRESOLVED_REFERENCE: tainted SQL input reaches a sink through an unresolved call at ${this.state.filePath}:${lineAt(this.state.source, call)}`
+          : `SQL sink has tainted or unresolved input without a fully proven dynamic SQL path at ${this.state.filePath}:${lineAt(this.state.source, call)}`);
       }
       return cleanValue;
     }
 
     const target = this.resolveExactCall(call, caller);
     if (!target) {
-      if (args.some((argument) => argument.tainted)) {
-        this.state.diagnostics.push(`Tainted argument reaches an unresolved call at ${this.state.filePath}:${lineAt(this.state.source, call)}`);
-        return emptyFlowValue(true);
+      const unresolved = args.reduce((value, argument) => this.combine(value, argument), cleanValue);
+      if (unresolved.tainted && unresolved.dynamicSql && unresolved.sqlLiteral) {
+        this.state.diagnostics.push(`UNRESOLVED_REFERENCE: tainted argument reaches an unresolved call at ${this.state.filePath}:${lineAt(this.state.source, call)}`);
       }
+      if (unresolved.tainted) return { ...unresolved, unknown: true };
       return cleanValue;
     }
-    if (this.callStack.includes(target.entity.id)) {
+    if (target.analyzer.callStack.includes(target.unit.entity.id)) {
       if (args.some((argument) => argument.tainted)) {
         this.state.diagnostics.push(`Taint call cycle could not be resolved at ${this.state.filePath}:${lineAt(this.state.source, call)}`);
         return emptyFlowValue(true);
       }
       return cleanValue;
     }
-    const callRelationship = this.state.exactCalls.get(`${caller.id}:${target.entity.id}`);
-    if (!callRelationship) return emptyFlowValue(true);
     const calledArgs = args.map((argument) => argument.tainted
-      ? this.appendNode(argument, this.makeNode('CALL', target.entity.qualified_name ?? target.entity.name, call, {
+      ? this.appendNode(argument, this.makeNode('CALL', target.unit.entity.qualified_name ?? target.unit.entity.name, call, {
         sourceEntityId: caller.id,
-        targetEntityId: target.entity.id,
-        sourceRelationshipId: callRelationship.id,
+        targetEntityId: target.unit.entity.id,
+        sourceRelationshipId: target.relationshipId,
       }), 'CALLS')
       : argument);
-    const returned = this.executeFunction(target, calledArgs, depth + 1, call);
+    const returned = target.analyzer.executeFunction(target.unit, calledArgs, depth + 1, call);
     if (!returned.tainted) return returned;
-    return this.appendNode(returned, this.makeNode('CALL', `${target.entity.name} return`, call, {
+    return this.appendNode(returned, this.makeNode('CALL', `${target.unit.entity.name} return`, call, {
       sourceEntityId: caller.id,
-      targetEntityId: target.entity.id,
-      sourceRelationshipId: callRelationship.id,
+      targetEntityId: target.unit.entity.id,
+      sourceRelationshipId: target.relationshipId,
     }), 'RETURNED_FROM_CALL');
   }
 
-  private resolveExactCall(call: ts.CallExpression, caller: CodeEntityRecord): FunctionUnit | null {
+  private resolveExactCall(call: ts.CallExpression, caller: CodeEntityRecord): ResolvedFunctionCall | null {
     let targetName: string | null = null;
+    let importedOnly = false;
     if (ts.isIdentifier(call.expression)) targetName = call.expression.text;
-    else if (ts.isPropertyAccessExpression(call.expression) && call.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
-      targetName = call.expression.name.text;
+    else if (ts.isPropertyAccessExpression(call.expression)) {
+      if (call.expression.expression.kind === ts.SyntaxKind.ThisKeyword) {
+        targetName = call.expression.name.text;
+      } else if (ts.isIdentifier(call.expression.expression)) {
+        targetName = `${call.expression.expression.text}.${call.expression.name.text}`;
+        importedOnly = true;
+      }
     }
     if (!targetName) return null;
+    if (importedOnly) return this.state.importedFunctions.get(targetName) ?? null;
     const candidates = this.state.functionEntitiesByName.get(targetName) ?? [];
-    if (candidates.length !== 1) return null;
-    const target = candidates[0];
-    const key = `${caller.id}:${target.entity.id}`;
-    return target && this.state.exactCalls.has(key) ? target : null;
+    if (candidates.length > 0) {
+      if (candidates.length !== 1) return null;
+      const target = candidates[0];
+      const relationship = target && this.state.exactCalls.get(`${caller.id}:${target.entity.id}`);
+      return target && relationship
+        ? { analyzer: this, unit: target, relationshipId: relationship.id }
+        : null;
+    }
+    if (!ts.isIdentifier(call.expression)) return null;
+    if (this.state.localBindingsByEntityId.get(caller.id)?.has(targetName)) return null;
+    return this.state.importedFunctions.get(targetName) ?? null;
   }
 
   private executeFunction(
@@ -697,6 +817,7 @@ export class SqlInjectionAnalyzer implements Analyzer {
     let totalTaintEdges = 0;
     let totalPaths = 0;
     const maxDurationMs = context.resourceBudget.maxDurationMs;
+    const typeScriptModules = new Map<string, TypeScriptModuleAnalysis>();
 
     for (const filePath of selectedFiles) {
       if (Date.now() - started >= maxDurationMs) {
@@ -757,6 +878,7 @@ export class SqlInjectionAnalyzer implements Analyzer {
       const fileEntities = entitiesByFile.get(filePath) ?? [];
       const functionsById = new Map<string, FunctionUnit>();
       const functionEntitiesByName = new Map<string, FunctionUnit[]>();
+      const exportedFunctions = new Map<string, FunctionUnit[]>();
       const astFunctions: Array<{ node: ts.FunctionLikeDeclaration; name: string }> = [];
       const collect = (node: ts.Node): void => {
         if (isFunctionLike(node)) {
@@ -778,19 +900,139 @@ export class SqlInjectionAnalyzer implements Analyzer {
           partial = true;
           continue;
         }
-        const unit = { entity, node: item.node };
+        const unit = { entity, node: item.node, localBindings: collectLocalBindings(item.node) };
         functionsById.set(entity.id, unit);
         functionEntitiesByName.set(item.name, [...(functionEntitiesByName.get(item.name) ?? []), unit]);
+        for (const exportName of functionExportNames(item.node, item.name)) {
+          exportedFunctions.set(exportName, [...(exportedFunctions.get(exportName) ?? []), unit]);
+        }
       }
       const moduleEntity = fileEntities.find((entity) => entity.entity_type === 'MODULE');
       const exactCalls = new Map(relationships
         .filter((relationship) => relationship.relation === 'CALLS' && relationship.resolution === 'EXACT')
         .map((relationship) => [`${relationship.source_entity_id}:${relationship.target_entity_id}`, relationship]));
+      const importedBindings = new Map<string, { importedName: string; moduleSpecifier: string }>();
+      const addCommonJsExport = (exportName: string, value: ts.Node): void => {
+        const unit = isFunctionLike(value)
+          ? [...functionsById.values()].find((candidate) => candidate.node === value)
+          : ts.isIdentifier(value)
+            ? (functionEntitiesByName.get(value.text) ?? []).length === 1
+              ? functionEntitiesByName.get(value.text)?.[0]
+              : undefined
+            : undefined;
+        if (unit) {
+          exportedFunctions.set(exportName, [
+            ...(exportedFunctions.get(exportName) ?? []),
+            unit,
+          ]);
+        }
+      };
+      for (const statement of source.statements) {
+        if (ts.isImportDeclaration(statement)
+          && ts.isStringLiteral(statement.moduleSpecifier)
+          && statement.importClause
+          && !statement.importClause.isTypeOnly) {
+          const moduleSpecifier = statement.moduleSpecifier.text;
+          const clause = statement.importClause;
+          if (clause.name) importedBindings.set(clause.name.text, { importedName: 'default', moduleSpecifier });
+          if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+            for (const specifier of clause.namedBindings.elements) {
+              if (specifier.isTypeOnly) continue;
+              importedBindings.set(specifier.name.text, {
+                importedName: specifier.propertyName?.text ?? specifier.name.text,
+                moduleSpecifier,
+              });
+            }
+          } else if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
+            importedBindings.set(clause.namedBindings.name.text, { importedName: '*', moduleSpecifier });
+          }
+        }
+        if (ts.isVariableStatement(statement)) {
+          for (const declaration of statement.declarationList.declarations) {
+            const initializer = declaration.initializer;
+            if (!initializer || !ts.isCallExpression(initializer)
+              || !ts.isIdentifier(initializer.expression)
+              || initializer.expression.text !== 'require'
+              || initializer.arguments.length !== 1
+              || !ts.isStringLiteral(initializer.arguments[0])) continue;
+            const moduleSpecifier = initializer.arguments[0].text;
+            if (ts.isIdentifier(declaration.name)) {
+              importedBindings.set(declaration.name.text, { importedName: '*', moduleSpecifier });
+            } else if (ts.isObjectBindingPattern(declaration.name)) {
+              for (const element of declaration.name.elements) {
+                if (element.dotDotDotToken || !ts.isIdentifier(element.name)) continue;
+                const importedName = element.propertyName
+                  ? ts.isIdentifier(element.propertyName) || ts.isStringLiteral(element.propertyName)
+                    ? element.propertyName.text
+                    : null
+                  : element.name.text;
+                if (importedName) {
+                  importedBindings.set(element.name.text, { importedName, moduleSpecifier });
+                }
+              }
+            }
+          }
+        }
+        if (ts.isExportDeclaration(statement)
+          && !statement.moduleSpecifier
+          && statement.exportClause
+          && ts.isNamedExports(statement.exportClause)) {
+          for (const specifier of statement.exportClause.elements) {
+            const localName = specifier.propertyName?.text ?? specifier.name.text;
+            const candidates = functionEntitiesByName.get(localName) ?? [];
+            if (candidates.length === 1) {
+              const exportName = specifier.name.text;
+              exportedFunctions.set(exportName, [
+                ...(exportedFunctions.get(exportName) ?? []),
+                candidates[0],
+              ]);
+            }
+          }
+        }
+        if (ts.isExpressionStatement(statement) && ts.isBinaryExpression(statement.expression)
+          && statement.expression.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+          const { left, right } = statement.expression;
+          if (ts.isPropertyAccessExpression(left)
+            && ts.isIdentifier(left.expression)
+            && left.expression.text === 'exports') {
+            addCommonJsExport(left.name.text, right);
+          } else if (ts.isPropertyAccessExpression(left)
+            && ts.isPropertyAccessExpression(left.expression)
+            && ts.isIdentifier(left.expression.expression)
+            && left.expression.expression.text === 'module'
+            && left.expression.name.text === 'exports') {
+            addCommonJsExport(left.name.text, right);
+          } else if (ts.isPropertyAccessExpression(left)
+            && ts.isIdentifier(left.expression)
+            && left.expression.text === 'module'
+            && left.name.text === 'exports'
+            && ts.isObjectLiteralExpression(right)) {
+            for (const property of right.properties) {
+              if (ts.isPropertyAssignment(property)) {
+                const exportName = staticPropertyName(property.name);
+                if (exportName) addCommonJsExport(exportName, property.initializer);
+              } else if (ts.isShorthandPropertyAssignment(property)) {
+                addCommonJsExport(property.name.text, property.name);
+              } else if (ts.isMethodDeclaration(property)) {
+                const exportName = staticPropertyName(property.name);
+                if (exportName) addCommonJsExport(exportName, property);
+              }
+            }
+          } else if (ts.isPropertyAccessExpression(left)
+            && ts.isIdentifier(left.expression)
+            && left.expression.text === 'module'
+            && left.name.text === 'exports') {
+            addCommonJsExport('default', right);
+          }
+        }
+      }
       const state: FileAnalysisState = {
         filePath,
         source,
         functionEntitiesByName,
         exactCalls,
+        importedFunctions: new Map(),
+        localBindingsByEntityId: new Map(Array.from(functionsById.values(), (unit) => [unit.entity.id, unit.localBindings])),
         diagnostics: [],
         findings: [],
         taintNodes: 0,
@@ -807,28 +1049,88 @@ export class SqlInjectionAnalyzer implements Analyzer {
         budgetExhausted: false,
         seenSinks: new Set(),
       };
-      const fileAnalyzer = new SqlInjectionFileAnalyzer(state);
-      if (moduleEntity) fileAnalyzer.analyzeModule(moduleEntity, source.statements);
+      typeScriptModules.set(filePath, {
+        filePath,
+        source,
+        ...(moduleEntity ? { moduleEntity } : {}),
+        functionsById,
+        exportedFunctions,
+        importedBindings,
+        state,
+        analyzer: new SqlInjectionFileAnalyzer(state),
+      });
+    }
+
+    const availableFiles = [...typeScriptModules.keys()];
+    for (const moduleAnalysis of typeScriptModules.values()) {
+      if (Date.now() - started >= maxDurationMs) {
+        diagnostics.push(`Exceeded maxDurationMs budget (${maxDurationMs}) while resolving imports`);
+        partial = true;
+        break;
+      }
+      for (const [localName, binding] of moduleAnalysis.importedBindings) {
+        const targetPath = resolveRelativeImportPath(moduleAnalysis.filePath, binding.moduleSpecifier, availableFiles);
+        if (!targetPath) continue;
+        const targetModule = typeScriptModules.get(targetPath);
+        if (!targetModule) continue;
+        const targets = binding.importedName === '*'
+          ? [...targetModule.exportedFunctions.entries()].flatMap(([exportName, exportedFunctions]) =>
+            exportedFunctions.length === 1 ? [[`${localName}.${exportName}`, exportedFunctions[0]!] as const] : [])
+          : (targetModule.exportedFunctions.get(binding.importedName) ?? []).length === 1
+            ? [[localName, targetModule.exportedFunctions.get(binding.importedName)![0]!] as const]
+            : [];
+        for (const [bindingName, functionUnit] of targets) {
+          moduleAnalysis.state.importedFunctions.set(bindingName, {
+            analyzer: targetModule.analyzer,
+            unit: functionUnit,
+            relationshipId: createImportRelationshipId(
+              moduleAnalysis.moduleEntity?.id ?? moduleAnalysis.filePath,
+              functionUnit.entity.id,
+              moduleAnalysis.filePath,
+              binding.importedName === '*' ? bindingName.slice(localName.length + 1) : binding.importedName,
+            ),
+          });
+        }
+      }
+    }
+
+    for (const moduleAnalysis of typeScriptModules.values()) {
+      if (Date.now() - started >= maxDurationMs) {
+        diagnostics.push(`Exceeded maxDurationMs budget (${maxDurationMs})`);
+        partial = true;
+        break;
+      }
+      moduleAnalysis.state.limits.maxTaintNodes = Math.max(0, SECURITY_LIMITS.maxTaintNodes - totalTaintNodes);
+      moduleAnalysis.state.limits.maxTaintEdges = Math.max(0, SECURITY_LIMITS.maxTaintEdges - totalTaintEdges);
+      moduleAnalysis.state.limits.maxPaths = Math.max(0, SECURITY_LIMITS.maxPaths - totalPaths);
+      if (moduleAnalysis.moduleEntity) moduleAnalysis.analyzer.analyzeModule(moduleAnalysis.moduleEntity, moduleAnalysis.source.statements);
       else {
-        diagnostics.push(`${filePath}: module entity is unavailable; top-level flow was not analyzed`);
+        diagnostics.push(`${moduleAnalysis.filePath}: module entity is unavailable; top-level flow was not analyzed`);
         partial = true;
       }
-      for (const unit of functionsById.values()) fileAnalyzer.analyzeFunction(unit);
-      diagnostics.push(...state.diagnostics);
-      if (state.diagnostics.length > 0) partial = true;
-      for (const finding of state.findings) {
+      for (const unit of moduleAnalysis.functionsById.values()) moduleAnalysis.analyzer.analyzeFunction(unit);
+      totalTaintNodes = 0;
+      totalTaintEdges = 0;
+      totalPaths = 0;
+      for (const analyzedModule of typeScriptModules.values()) {
+        totalTaintNodes += analyzedModule.state.taintNodes;
+        totalTaintEdges += analyzedModule.state.taintEdges;
+        totalPaths += analyzedModule.state.paths;
+      }
+      if ([...typeScriptModules.values()].some((analyzedModule) => analyzedModule.state.budgetExhausted)) {
+        partial = true;
+        break;
+      }
+    }
+    for (const moduleAnalysis of typeScriptModules.values()) {
+      diagnostics.push(...moduleAnalysis.state.diagnostics);
+      if (moduleAnalysis.state.diagnostics.length > 0 || moduleAnalysis.state.budgetExhausted) partial = true;
+      for (const finding of moduleAnalysis.state.findings) {
         const signature = finding.semanticTarget ?? '';
         if (!seenFindings.has(signature)) {
           seenFindings.add(signature);
           findings.push(finding);
         }
-      }
-      totalTaintNodes += state.taintNodes;
-      totalTaintEdges += state.taintEdges;
-      totalPaths += state.paths;
-      if (state.budgetExhausted) {
-        partial = true;
-        break;
       }
     }
     return this.result(

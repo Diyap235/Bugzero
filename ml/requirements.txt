@@ -1,0 +1,11 @@
+# Notebook and pipeline were authored against Python 3.12; Python 3.11 is also supported.
+numpy==2.2.6
+pandas==2.3.1
+scikit-learn==1.9.1
+torch==2.7.1
+transformers==4.53.2
+huggingface-hub==0.33.4
+tokenizers==0.21.2
+safetensors==0.5.3
+joblib==1.5.1
+matplotlib==3.10.3

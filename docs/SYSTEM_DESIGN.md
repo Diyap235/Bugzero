@@ -2091,7 +2091,6 @@ bugzero/
 ├── packages/
 │   ├── contracts/
 │   ├── database/
-│   ├── shared/
 │   └── config/
 │
 ├── engine/
@@ -2113,12 +2112,8 @@ bugzero/
 │
 ├── db/
 ├── tests/
-├── scripts/
 ├── docs/
 │   └── adr/
-│
-└── .github/
-    └── workflows/
 ```
 
 ------------------------------------------------------------------------

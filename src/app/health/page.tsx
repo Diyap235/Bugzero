@@ -7,9 +7,6 @@ import { AppShell } from "@/components/layout/AppShell";
 import { Metric, PageHeading, ResourceState, StatusLabel, UnknownValue, formatTimestamp } from "@/components/product/ui";
 import { useApiResource } from "@/hooks/useApiResource";
 import { bugzeroApi } from "@/lib/api-client";
-import { sampleHealthHistory, sampleRepository } from "@/domains/product/sample-data";
-
-const sampleHealthData = [{ repository: sampleRepository, history: sampleHealthHistory }];
 
 function HealthContent() {
   const params = useSearchParams();
@@ -21,10 +18,10 @@ function HealthContent() {
       repository,
       history: await bugzeroApi.getHealthHistory(repository.id),
     })));
-    return data.some(({ history }) => history.length > 0) ? data : [];
+    return data;
   }, []);
-  const resource = useApiResource(load, sampleHealthData);
-  const all = resource.data ?? sampleHealthData;
+  const resource = useApiResource(load);
+  const all = useMemo(() => resource.data ?? [], [resource.data]);
   const selection = selectedId || queryRepositoryId || all[0]?.repository.id || "";
   const current = useMemo(() => all.find(({ repository }) => repository.id === selection), [all, selection]);
   const snapshots = current?.history ?? [];
@@ -38,8 +35,8 @@ function HealthContent() {
     <AppShell>
       <div className="space-y-6">
         <PageHeading eyebrow="Deterministic repository health" title="Repository health" description="Scores and coverage are read from immutable health snapshots. Unknown dimensions are not treated as zero." />
-        <ResourceState loading={resource.loading} error={resource.error} empty={all.length === 0} retry={resource.refresh} sample={resource.isFallback} emptyTitle="No repositories are available" />
-        {(!resource.error || resource.isFallback) && all.length > 0 && (
+        <ResourceState loading={resource.loading} error={resource.error} empty={all.length === 0} retry={resource.refresh} emptyTitle="No repositories are available" />
+        {!resource.error && all.length > 0 && (
           <>
             <label className="block max-w-lg text-[10px] uppercase tracking-wide text-text-muted">Repository<select value={selection} onChange={(event) => setSelectedId(event.target.value)} className="mt-1 block h-10 w-full rounded-lg border border-border bg-card px-3 text-sm text-white">{all.map(({ repository }) => <option key={repository.id} value={repository.id}>{repository.fullName}</option>)}</select></label>
             {!latest ? <section className="rounded-xl border border-border bg-card p-6"><h2 className="text-sm font-semibold text-white">No health snapshot</h2><p className="mt-2 text-sm text-text-muted">No persisted health assessment is available for this repository.</p><Link href={current ? `/repositories/${current.repository.id}` : "/repositories"} className="mt-4 inline-block text-xs text-primary hover:underline">Open repository →</Link></section> : (

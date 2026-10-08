@@ -9,6 +9,9 @@ import type {
 } from '@bugzero/database';
 import { processAnalysisQueuePayload } from '../src/jobs/analysis-queue.js';
 import { AnalysisJobProcessor } from '../src/jobs/process-analysis-job.js';
+import { GroqInvestigator } from '../src/ai/groq/groq-client.js';
+
+const disabledAiInvestigator = new GroqInvestigator({ environment: {} });
 
 const organizationId = '11111111-1111-4111-8111-111111111111';
 const repositoryId = '22222222-2222-4222-8222-222222222222';
@@ -97,6 +100,7 @@ test('analysis failures remain retryable until the configured final attempt', as
     };
     const jobStates: string[] = [];
     const processor = new AnalysisJobProcessor({
+      aiInvestigator: disabledAiInvestigator,
       analysis: {
         async getJob() { return job; },
         async getRun() { return run; },

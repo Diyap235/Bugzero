@@ -73,6 +73,14 @@ export interface CreateOrGetRiskAssessmentResult {
   created: boolean;
 }
 
+function normalizeRiskAssessmentRecord(record: RiskAssessmentRecord): RiskAssessmentRecord {
+  const technicalRisk = Number(record.technical_risk);
+  if (!Number.isFinite(technicalRisk) || technicalRisk < 0 || technicalRisk > 100) {
+    throw new Error('Persisted technical risk is not a finite number between 0 and 100');
+  }
+  return { ...record, technical_risk: technicalRisk };
+}
+
 export class RiskAssessmentRepository {
   constructor(private readonly pool: Pool = getDatabasePool()) {}
 
@@ -83,7 +91,7 @@ export class RiskAssessmentRepository {
        ORDER BY assessed_at DESC, id`,
       [organizationId, findingId],
     );
-    return result.rows;
+    return result.rows.map(normalizeRiskAssessmentRecord);
   }
 
   async createOrGet(input: CreateRiskAssessmentInput): Promise<CreateOrGetRiskAssessmentResult> {
@@ -135,7 +143,7 @@ export class RiskAssessmentRepository {
        RETURNING *`,
       values,
     );
-    if (inserted.rows[0]) return { record: inserted.rows[0], created: true };
+    if (inserted.rows[0]) return { record: normalizeRiskAssessmentRecord(inserted.rows[0]), created: true };
 
     const existing = await this.pool.query<RiskAssessmentRecord>(
       `SELECT * FROM risk_assessments
@@ -144,7 +152,7 @@ export class RiskAssessmentRepository {
       [input.organizationId, input.findingOccurrenceId, input.profileId, input.profileVersion],
     );
     if (!existing.rows[0]) throw new Error('Risk assessment identity conflict occurred but the existing record could not be loaded');
-    return { record: existing.rows[0], created: false };
+    return { record: normalizeRiskAssessmentRecord(existing.rows[0]), created: false };
   }
 }
 

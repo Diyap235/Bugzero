@@ -7,10 +7,8 @@ import { AppShell } from "@/components/layout/AppShell";
 import { PageHeading, ResourceState, StatusLabel, formatTimestamp } from "@/components/product/ui";
 import { useApiResource } from "@/hooks/useApiResource";
 import { bugzeroApi } from "@/lib/api-client";
-import { sampleFindings, sampleRepository } from "@/domains/product/sample-data";
 
 const pageSize = 25;
-const sampleRows = sampleFindings.map((row) => ({ ...row, repository: sampleRepository }));
 
 function FindingsContent() {
   const params = useSearchParams();
@@ -29,8 +27,8 @@ function FindingsContent() {
     })));
     return rows.flatMap(({ repository, findings }) => findings.map((row) => ({ ...row, repository })));
   }, []);
-  const resource = useApiResource(load, sampleRows);
-  const all = resource.data ?? sampleRows;
+  const resource = useApiResource(load);
+  const all = useMemo(() => resource.data ?? [], [resource.data]);
   const visible = useMemo(() => all.filter(({ finding, occurrence, repository }) => {
     if (repositoryFilter && repository.id !== repositoryFilter) return false;
     if (severity !== "ALL" && finding.currentSeverity !== severity) return false;
@@ -49,8 +47,8 @@ function FindingsContent() {
     <AppShell>
       <div className="space-y-5">
         <PageHeading eyebrow="Investigation workspace" title="Findings" description={`${countOpen} open of ${all.length} persisted findings. Severity and technical risk are displayed separately.`} />
-        <ResourceState loading={resource.loading} error={resource.error} empty={all.length === 0} retry={resource.refresh} sample={resource.isFallback} emptyTitle="No findings are available" />
-        {(!resource.error || resource.isFallback) && all.length > 0 && (
+        <ResourceState loading={resource.loading} error={resource.error} empty={all.length === 0} retry={resource.refresh} emptyTitle="No findings are available" />
+        {!resource.error && all.length > 0 && (
           <>
             <div className="grid gap-3 sm:grid-cols-4">
               <label className="text-[10px] uppercase tracking-wide text-text-muted">Severity<select value={severity} onChange={(event) => { setSeverity(event.target.value); setPage(0); }} className="mt-1 block h-10 w-full rounded-lg border border-border bg-card px-3 text-xs text-white"><option>ALL</option>{["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].map((option) => <option key={option}>{option}</option>)}</select></label>

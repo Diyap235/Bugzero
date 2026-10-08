@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { DEMO_CREDENTIALS, InvalidDemoCredentialsError } from "@/lib/auth/demo-auth";
+import { ApiError } from "@/lib/api-client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,9 +30,13 @@ export default function LoginPage() {
       router.replace("/dashboard");
     } catch (reason) {
       setPassword("");
-      setError(reason instanceof InvalidDemoCredentialsError
-        ? "Invalid demo credentials."
-        : "Demo sign-in could not be completed. Please try again.");
+      setError(reason instanceof ApiError && reason.code === "UNAUTHORIZED"
+        ? "The email or password is not valid."
+        : reason instanceof ApiError && reason.code === "FORBIDDEN"
+          ? "This account does not have access to a BugZero organization."
+          : reason instanceof ApiError && reason.code === "NOT_FOUND"
+            ? "Sign-in is not available in this environment."
+            : "Sign-in could not be completed. Check your credentials or try again later.");
     } finally {
       setSubmitting(false);
     }
@@ -41,7 +45,7 @@ export default function LoginPage() {
   if (auth.isLoading || auth.isAuthenticated) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background px-4 text-sm text-text-muted" role="status">
-        {auth.isLoading ? "Checking your demo session…" : "Opening your workspace…"}
+        {auth.isLoading ? "Checking your session…" : "Opening your workspace…"}
       </main>
     );
   }
@@ -62,14 +66,14 @@ export default function LoginPage() {
 
         <div className="mt-9 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
           <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-          Demo workspace
+          Workspace sign-in
         </div>
         <h1 className="mt-5 text-3xl font-semibold tracking-tight text-white">Welcome back</h1>
         <p className="mt-2 text-sm leading-6 text-text-muted">Sign in to explore your BugZero repository intelligence workspace.</p>
 
         {auth.sessionExpired && (
           <p className="mt-5 rounded-lg border border-amber-700/40 bg-amber-950/20 px-3 py-2 text-sm text-amber-200" role="status">
-            Your demo session expired. Sign in again to continue.
+            Your session expired. Sign in again to continue.
           </p>
         )}
         {error && (
@@ -102,7 +106,7 @@ export default function LoginPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="mt-2 h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-white outline-none transition-colors placeholder:text-text-muted focus:border-primary focus:ring-2 focus:ring-primary/20"
-              placeholder="Enter demo password"
+              placeholder="Enter your password"
             />
           </label>
           <button
@@ -115,14 +119,8 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <aside className="mt-6 rounded-xl border border-border bg-background/70 p-4" aria-label="Demo credentials">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">Demo workspace credentials</p>
-          <p className="mt-2 font-mono text-xs text-text-secondary">Email: {DEMO_CREDENTIALS.email}</p>
-          <p className="mt-1 font-mono text-xs text-text-secondary">Password: {DEMO_CREDENTIALS.password}</p>
-        </aside>
-
-        <p className="mt-5 text-center text-[10px] leading-5 text-text-muted">
-          Demo authentication only — replace with server-issued, server-verified authentication before production.
+        <p className="mt-6 text-center text-xs text-text-muted">
+          New to BugZero? <Link href="/signup" className="font-medium text-primary hover:underline">Create an account</Link>
         </p>
         <Link href="/" className="mt-6 block text-center text-xs text-text-muted transition-colors hover:text-white">
           Back to BugZero

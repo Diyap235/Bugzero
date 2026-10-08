@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type {
   AnalysisRepository,
+  AIInvestigationRepository,
   CommitRepository,
   EvidenceRepository,
   FindingRepository,
@@ -10,14 +11,13 @@ import type {
   RepositoryRepository,
   RiskAssessmentRepository,
 } from '@bugzero/database';
-import { GitCommitSha, OnboardGitHubRepositoryRequestSchema, ReportListResponseSchema } from '@bugzero/contracts';
+import { AIInvestigationRecordSchema, ReportListResponseSchema } from '@bugzero/contracts';
 import type { AuthenticatedAnalysisPrincipal } from '../analysis/routes.js';
-import type { GitHubRepositoryProvider } from '@bugzero/workers/github-provider';
 
 export type ProductRouteDependencies = {
   authenticate(request: FastifyRequest): Promise<AuthenticatedAnalysisPrincipal | null>;
   members: Pick<MemberRepository, 'getMembership'>;
-  repositories: Pick<RepositoryRepository, 'getById' | 'listByOrganization' | 'createWithCommit'>;
+  repositories: Pick<RepositoryRepository, 'getById' | 'listByOrganization'>;
   commits: Pick<CommitRepository, 'getLatest' | 'getById'>;
   analysis: Pick<AnalysisRepository, 'listRunsByRepository' | 'getLatestJobForRun'>;
   findings: Pick<FindingRepository, 'getByRepository' | 'getById' | 'getOccurrencesForFinding'>;
@@ -25,7 +25,7 @@ export type ProductRouteDependencies = {
   risks: Pick<RiskAssessmentRepository, 'getForFinding'>;
   health: Pick<HealthRepository, 'getLatest' | 'listByRepository'>;
   reports: Pick<ReportRepository, 'listByRepository'>;
-  github: Pick<GitHubRepositoryProvider, 'getRepositoryByFullName' | 'getCommit'>;
+  aiInvestigations: Pick<AIInvestigationRepository, 'getForOccurrence'>;
 };
 
 async function authorize(
@@ -90,52 +90,93 @@ function camelRun(run: Awaited<ReturnType<ProductRouteDependencies['analysis']['
   };
 }
 
-export function registerProductRoutes(server: FastifyInstance, dependencies: ProductRouteDependencies): void {
-  server.post('/repositories', async (request, reply) => {
-    const principal = await authorize(request, reply, dependencies);
-    if (!principal) return;
-    const member = await dependencies.members.getMembership(principal.organizationId, principal.userId);
-    if (!member || !['OWNER', 'ADMIN', 'DEVELOPER'].includes(member.role)) {
-      return reply.code(403).send({ error: 'Insufficient role to register a repository' });
-    }
-    const parsedInput = OnboardGitHubRepositoryRequestSchema.safeParse(request.body);
-    if (!parsedInput.success) {
-      return reply.code(400).send({ error: 'Invalid GitHub repository name' });
-    }
+function ruleTitle(ruleId: string): string {
+  if (ruleId === 'SECURITY.SQL_INJECTION') return 'SQL Injection';
+  const title = ruleId.split('.').at(-1)?.replaceAll('_', ' ') ?? ruleId;
+  return title.replace(/\b\w/g, (character) => character.toUpperCase());
+}
 
-    let providerRepository;
-    let providerCommit;
-    try {
-      providerRepository = await dependencies.github.getRepositoryByFullName(parsedInput.data.fullName);
-      providerCommit = await dependencies.github.getCommit(providerRepository, providerRepository.defaultBranch);
-    } catch (error) {
-      request.log.warn({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'GitHub repository onboarding lookup failed');
-      return reply.code(502).send({ error: 'GitHub repository could not be verified' });
-    }
-    const commitSha = GitCommitSha.safeParse(providerCommit.sha);
-    if (!commitSha.success) {
-      request.log.warn({ repositoryId: providerRepository.id }, 'GitHub returned an invalid commit identifier');
-      return reply.code(502).send({ error: 'GitHub returned invalid repository metadata' });
-    }
+function runPipeline(
+  runs: Awaited<ReturnType<ProductRouteDependencies['analysis']['listRunsByRepository']>>,
+  runId: string,
+): Record<string, unknown> | null {
+  const run = runs.find((candidate) => candidate.id === runId);
+  const coverage = run?.coverage;
+  if (typeof coverage !== 'object' || coverage === null) return null;
+  const pipeline = coverage.pipeline;
+  return typeof pipeline === 'object' && pipeline !== null
+    ? pipeline as Record<string, unknown>
+    : null;
+}
 
-    const registered = await dependencies.repositories.createWithCommit({
-      organizationId: principal.organizationId,
-      provider: 'GITHUB',
-      externalId: providerRepository.id,
-      fullName: providerRepository.fullName,
-      defaultBranch: providerRepository.defaultBranch,
-      cloneUrl: providerRepository.cloneUrl,
-      commitSha: commitSha.data,
-      parentCommitSha: providerCommit.parentSha,
-      committedAt: providerCommit.committedAt,
-      indexedAt: new Date().toISOString(),
-    });
-    return reply.code(201).send({
-      repository: camelRepository(registered.repository),
-      latestCommit: camelCommit(registered.commit),
-    });
+function runMLReport(
+  runs: Awaited<ReturnType<ProductRouteDependencies['analysis']['listRunsByRepository']>>,
+  runId: string,
+): Record<string, unknown> | null {
+  const report = runPipeline(runs, runId)?.mlSignals;
+  return typeof report === 'object' && report !== null ? report as Record<string, unknown> : null;
+}
+
+function runAIInvestigationStatus(
+  runs: Awaited<ReturnType<ProductRouteDependencies['analysis']['listRunsByRepository']>>,
+  runId: string,
+): 'NOT_REQUESTED' | 'UNAVAILABLE' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | null {
+  const summary = runPipeline(runs, runId)?.aiInvestigation;
+  if (typeof summary !== 'object' || summary === null || !('status' in summary)) return null;
+  const status = summary.status;
+  return status === 'NOT_REQUESTED' || status === 'UNAVAILABLE' || status === 'COMPLETED'
+    || status === 'PARTIAL' || status === 'FAILED'
+    ? status
+    : null;
+}
+
+function matchingMLSignal(
+  report: Record<string, unknown> | null,
+  filePath: string | null,
+  startLine: number | null,
+  endLine: number | null,
+): Record<string, unknown> | null {
+  if (!report || report.status !== 'AVAILABLE' || !filePath || !Array.isArray(report.signals)) return null;
+  const match = report.signals.find((candidate: unknown) => {
+    if (typeof candidate !== 'object' || candidate === null || !('function' in candidate)) return false;
+    const signal = candidate as Record<string, unknown>;
+    const fn = signal.function;
+    if (typeof fn !== 'object' || fn === null) return false;
+    const functionRef = fn as Record<string, unknown>;
+    if (
+      functionRef.filePath !== filePath
+      || typeof signal.modelVersion !== 'string'
+      || (signal.label !== 'safe' && signal.label !== 'vulnerable')
+      || typeof signal.score !== 'number'
+      || !Number.isFinite(signal.score)
+      || signal.score < 0
+      || signal.score > 1
+    ) return false;
+    const functionStart = functionRef.startLine;
+    const functionEnd = functionRef.endLine;
+    return typeof functionStart === 'number' && typeof functionEnd === 'number'
+      && (startLine === null || functionEnd >= startLine)
+      && (endLine === null || functionStart <= endLine);
   });
+  if (!match || typeof match !== 'object' || match === null) return null;
+  const signal = match as Record<string, unknown>;
+  const fn = signal.function as Record<string, unknown>;
+  return {
+    classification: 'INVESTIGATIVE',
+    modelVersion: signal.modelVersion,
+    label: signal.label,
+    score: signal.score,
+    timestamp: typeof signal.timestamp === 'string' ? signal.timestamp : null,
+    function: {
+      functionName: typeof fn.functionName === 'string' ? fn.functionName : null,
+      filePath: String(fn.filePath),
+      startLine: Number(fn.startLine),
+      endLine: Number(fn.endLine),
+    },
+  };
+}
 
+export function registerProductRoutes(server: FastifyInstance, dependencies: ProductRouteDependencies): void {
   server.get('/repositories', async (request, reply) => {
     const principal = await authorize(request, reply, dependencies);
     if (!principal) return;
@@ -205,11 +246,14 @@ export function registerProductRoutes(server: FastifyInstance, dependencies: Pro
         dependencies.commits.getById(principal.organizationId, repository.id, run.commit_id),
       ]);
       const occurrenceIds = findingData.flatMap(({ occurrences }) =>
-        occurrences.filter((occurrence) => occurrence.analysis_run_id === run.id).map((occurrence) => occurrence.id));
+        occurrences.filter((occurrence) =>
+          occurrence.analysis_run_id === run.id || occurrence.commit_id === run.commit_id)
+          .map((occurrence) => occurrence.id));
       const totalTechnicalRisk = findingData.flatMap(({ risks }) => risks)
-        .filter((assessment) => assessment.analysis_run_id === run.id)
+        .filter((assessment) => assessment.analysis_run_id === run.id || assessment.commit_id === run.commit_id)
         .reduce((total, assessment) => total + Number(assessment.technical_risk), 0);
-      const healthSnapshot = healthSnapshots.find((snapshot) => snapshot.analysis_run_id === run.id);
+      const healthSnapshot = healthSnapshots.find((snapshot) => snapshot.analysis_run_id === run.id)
+        ?? healthSnapshots.find((snapshot) => snapshot.commit_id === run.commit_id);
       return {
         run: { ...camelRun(run), commitSha: commit?.commit_sha ?? null },
         job: job ? {
@@ -303,23 +347,59 @@ export function registerProductRoutes(server: FastifyInstance, dependencies: Pro
     if (!principal) return;
     const finding = await dependencies.findings.getById(principal.organizationId, request.params.findingId);
     if (!finding) return reply.code(404).send({ error: 'Finding not found' });
-    const [occurrences, evidenceRecords, riskRecords] = await Promise.all([
+    const [occurrences, evidenceRecords, riskRecords, runs] = await Promise.all([
       dependencies.findings.getOccurrencesForFinding(principal.organizationId, finding.id),
       dependencies.evidence.getEvidenceForFinding(principal.organizationId, finding.id),
       dependencies.risks.getForFinding(principal.organizationId, finding.id),
+      dependencies.analysis.listRunsByRepository(principal.organizationId, finding.repository_id),
     ]);
     const occurrence = occurrences.find((item) => item.id === finding.current_occurrence_id) ?? occurrences[0] ?? null;
     const evidenceRecord = evidenceRecords.find((item) => item.finding_occurrence_id === occurrence?.id) ?? null;
     const evidenceGraph = evidenceRecord
       ? await dependencies.evidence.getSnapshot(principal.organizationId, evidenceRecord.id)
       : null;
+    const aiRecords = occurrence
+      ? await dependencies.aiInvestigations.getForOccurrence(principal.organizationId, occurrence.id)
+      : [];
+    const aiInvestigations = aiRecords
+      .filter((record) => record.provider === 'GROQ' && record.evidence_id === evidenceRecord?.id)
+      .map((record) => AIInvestigationRecordSchema.parse({
+        id: record.id,
+        provider: record.provider,
+        model: record.model,
+        promptVersion: record.prompt_version,
+        status: record.status,
+        result: record.result,
+        errorCode: record.error_code,
+        createdAt: new Date(record.created_at).toISOString(),
+        updatedAt: new Date(record.updated_at).toISOString(),
+      }));
     const risks = occurrence
       ? riskRecords.filter((item) => item.finding_occurrence_id === occurrence.id)
       : [];
+    const selectedRisk = risks[0] ?? null;
+    const mlReport = occurrence ? runMLReport(runs, occurrence.analysis_run_id) : null;
+    const mlSignal = matchingMLSignal(
+      mlReport,
+      occurrence?.file_path ?? null,
+      occurrence?.start_line ?? null,
+      occurrence?.end_line ?? null,
+    );
+    const aiInvestigation = aiInvestigations[0] ?? null;
+    const aiResult = aiInvestigation?.result ?? null;
+    const aiInvestigationStatus = aiInvestigation?.status
+      ?? (occurrence ? runAIInvestigationStatus(runs, occurrence.analysis_run_id) : null);
     const commit = occurrence
       ? await dependencies.commits.getById(principal.organizationId, finding.repository_id, occurrence.commit_id)
       : null;
     return reply.send({
+      title: ruleTitle(finding.rule_id),
+      description: occurrence?.observation ?? null,
+      location: occurrence ? {
+        filePath: occurrence.file_path,
+        startLine: occurrence.start_line,
+        endLine: occurrence.end_line,
+      } : null,
       finding: {
         id: finding.id,
         organizationId: finding.organization_id,
@@ -373,6 +453,24 @@ export function registerProductRoutes(server: FastifyInstance, dependencies: Pro
       } : null,
       evidence: evidenceGraph,
       risks,
+      aiInvestigations,
+      risk: selectedRisk,
+      mlSignal,
+      mlSignalStatus: mlReport && ['AVAILABLE', 'UNAVAILABLE', 'NOT_APPLICABLE'].includes(String(mlReport.status))
+        ? mlReport.status
+        : null,
+      aiInvestigationStatus,
+      aiExplanation: aiInvestigation ? {
+        classification: 'EXPLANATORY',
+        provider: aiInvestigation?.provider ?? null,
+        model: aiInvestigation?.model ?? null,
+        status: aiInvestigation?.status ?? null,
+        summary: aiResult?.summary ?? null,
+        explanation: aiResult?.explanation ?? null,
+        attackPath: aiResult?.attackPath ?? [],
+        reasoningStatus: aiResult?.reasoningStatus ?? null,
+      } : null,
+      recommendedFix: aiResult?.remediation ?? null,
     });
   });
 

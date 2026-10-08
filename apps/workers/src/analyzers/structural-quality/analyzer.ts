@@ -86,7 +86,7 @@ export class StructuralQualityAnalyzer implements Analyzer {
       entitiesAnalyzed += 1;
 
       for (const rule of this.rules) {
-        if (Date.now() - start >= context.resourceBudget.maxDurationMs) {
+        if (rulesExecuted > 0 && Date.now() - start >= context.resourceBudget.maxDurationMs) {
           diagnostics.push(`Exceeded maxDurationMs budget (${context.resourceBudget.maxDurationMs})`);
           partial = true;
           stop = true;

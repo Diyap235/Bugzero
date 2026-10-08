@@ -12,6 +12,7 @@ export interface RepositoryFileRecord {
   size_bytes: number;
   language: string | null;
   object_key: string | null;
+  source_content: string | null;
   created_at: string;
 }
 
@@ -24,6 +25,7 @@ export interface CreateRepositoryFileInput {
   sizeBytes: number;
   language?: string | null;
   objectKey?: string | null;
+  sourceContent?: string | null;
 }
 
 export class RepositoryFileRepository {
@@ -31,8 +33,8 @@ export class RepositoryFileRepository {
 
   async create(input: CreateRepositoryFileInput): Promise<RepositoryFileRecord> {
     const result = await this.pool.query<RepositoryFileRecord>(
-      `INSERT INTO repository_files (organization_id, repository_id, commit_id, path, content_sha256, size_bytes, language, object_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO repository_files (organization_id, repository_id, commit_id, path, content_sha256, size_bytes, language, object_key, source_content)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
         input.organizationId,
@@ -43,6 +45,7 @@ export class RepositoryFileRepository {
         input.sizeBytes,
         input.language ?? null,
         input.objectKey ?? null,
+        input.sourceContent ?? null,
       ],
     );
 

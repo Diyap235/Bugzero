@@ -1,124 +1,147 @@
 # BugZero
 
-BugZero is a repository intelligence and review platform under active architecture definition. The repository currently includes the architectural foundation for a statement-based, version-aware analysis system that tracks repositories, commits, files, code entities, relationships, findings, evidence, and health snapshots.
+> **Your code has a story.**
 
-This workspace is not a completed production review product. It contains a PostgreSQL-first model, asynchronous API/worker analysis pipeline, deterministic Structural/Quality rules, a narrowly scoped SQL injection analyzer, evidence persistence, risk, and health calculation. The real database/Redis deployment and authenticated end-to-end path remain unverified.
+BugZero is a code intelligence platform that analyzes real codebases, detects security issues using deterministic analysis, collects evidence, calculates risk, and presents the results in a developer-focused interface.
 
-## Current implementation status
-
-| Capability | Status |
-| --- | --- |
-| Repository ingestion service v1 | IMPLEMENTED; API onboarding workflow absent |
-| Semantic Code IR v1 | IMPLEMENTED with documented parser limits |
-| Repository Intelligence v1 | IMPLEMENTED |
-| Impact analysis / analysis scope foundations | IMPLEMENTED |
-| PostgreSQL schema and repository adapters | IMPLEMENTED; tenant RLS context not wired or live-verified |
-| Contracts layer | IMPLEMENTED |
-| Deterministic Structural/Quality analyzer framework | IMPLEMENTED |
-| SQL injection security rule v1 | IMPLEMENTED (partial language/data-flow coverage) |
-| Other Security/Taint rules | PLANNED |
-| Deterministic Risk Engine v1 | IMPLEMENTED; live database behavior unverified |
-| Repository Health v1 | IMPLEMENTED; live database behavior unverified |
-| API analysis create/status and product reads | IMPLEMENTED behind external trusted authentication |
-| PostgreSQL/Redis/Docker deployment | NOT VERIFIED; Compose is currently a placeholder |
-| Live API-to-worker real-repository end-to-end | NOT VERIFIED |
-| AI explanation and enrichment | PLANNED |
-| Full end-to-end autonomous review pipeline | DEFERRED |
-
-## What exists in this repository
-
-- `docs/SYSTEM_DESIGN.md` and `docs/adr/` define the architecture and ADRs.
-- `db/migrations/0001`–`0007` define the PostgreSQL canonical schema and additive v1 analysis extensions.
-- `packages/contracts` defines shared TypeScript contracts and DTO validation.
-- `packages/database` provides PostgreSQL repository adapters; tenant RLS context remains to be wired.
-- `apps/api` and `apps/workers` implement analysis dispatch, product reads, and the asynchronous analysis pipeline; the API needs an externally supplied trusted authentication adapter.
-- `engine/` contains the analysis-engine directory layout for parser, code IR, findings, intelligence, evidence, risk, and AI layers.
-
-## Architecture at a glance
+## Core Workflow
 
 ```text
-Repository
-  ↓
-Ingestion / commit snapshot
-  ↓
-Semantic Code IR
-  ↓
-Repository intelligence
-  ↓
-Impact analysis and scope
-  ↓
-Findings + evidence + risk
-  ↓
-API / UI / worker orchestration
+ZIP Codebase
+    ↓
+Ingestion → Parsing → Semantic Code IR
+    ↓
+Repository Intelligence
+    ↓
+Deterministic Analysis
+    ↓
+Findings + Evidence + Risk
+    ↓
+Optional ML Signal / Groq Investigation
+    ↓
+PostgreSQL → API → Frontend
 ```
 
-BugZero intentionally separates source-of-truth repository content from derived analysis state. Findings are tied to semantic identity rather than raw file/line numbers, and evidence remains versioned and append-only.
+## Core Principles
 
-## Repository structure
+- **Evidence over claims**
+- **Deterministic analysis is authoritative**
+- **Fail closed** — unresolved flows do not become fabricated findings
+- **Unknown is better than guessed**
+- **AI and ML are investigative layers, not sources of truth**
+- **Frontend data comes from real persisted analysis results**
+
+## Current Capabilities
+
+- Real ZIP codebase upload
+- Repository creation and analysis
+- Source parsing and Semantic Code IR
+- Repository Intelligence
+- Deterministic **SQL Injection** analysis
+- Cross-file analysis
+- Evidence and risk assessment
+- Code health and analysis history
+- Finding Intelligence
+- Optional ML investigative signal
+- Optional Groq investigation
+- JWT authentication
+
+## Security Analysis
+
+The current deterministic security focus is **SQL Injection**.
+
+BugZero requires a real data flow to a database sink before reporting an authoritative finding.
 
 ```text
-BugZero/
-├── apps/
-│   ├── api/               # API workspace boundary
-│   ├── web/               # Next.js product shell
-│   └── workers/           # Async worker boundary
-├── db/
-│   └── migrations/        # Canonical PostgreSQL schema
-├── docs/
-│   ├── PRD.md             # product intent and scope
-│   ├── SYSTEM_DESIGN.md   # source-of-truth architecture
-│   ├── DATABASE_DESIGN.md # persistence model
-│   ├── adr/               # architecture decisions
-│   └── ...
-├── engine/
-│   ├── parser/
-│   ├── code_ir/
-│   ├── intelligence/
-│   ├── findings/
-│   ├── evidence/
-│   ├── risk/
-│   └── ai/
-├── packages/
-│   ├── contracts/
-│   ├── database/
-│   ├── shared/
-│   └── config/
-├── README.md
-├── package.json
-├── pnpm-workspace.yaml
-└── docker-compose.yml
+User Input → Data Flow → SQL Construction → Database Sink → Finding
 ```
 
-## Development
+SQL-looking code without a real sink is not automatically reported.
 
-Install dependencies with the workspace package manager:
+## AI & ML
+
+**ML:** Provides an investigative signal for supported Python functions and methods. It cannot create findings or modify deterministic evidence or risk.
+
+**Groq:** Provides bounded investigation, explanation, and remediation guidance. It cannot create authoritative findings or change deterministic evidence and risk.
+
+## Architecture
+
+```text
+Frontend
+   ↓
+API
+   ├── PostgreSQL
+   └── Redis / BullMQ
+             ↓
+           Worker
+             ↓
+      Parser → Code IR
+             ↓
+   Repository Intelligence
+             ↓
+    Deterministic Analysis
+             ↓
+    Finding / Evidence / Risk
+             ↓
+       ML / Groq (optional)
+```
+
+## Tech Stack
+
+- **Frontend:** Next.js, React, TypeScript
+- **API:** Node.js, TypeScript
+- **Worker:** Node.js, TypeScript
+- **Database:** PostgreSQL
+- **Queue:** Redis + BullMQ
+- **Code Intelligence:** Python + TypeScript
+- **ML:** CodeBERT + scikit-learn
+- **AI:** Groq
+- **Auth:** JWT / Ed25519
+- **Package Manager:** pnpm
+
+## Local Development
+
+Requirements: Node.js, pnpm, Python, PostgreSQL, and a Redis-compatible server.
+
+Install:
 
 ```bash
-npm install
-# or
 pnpm install
 ```
 
-Validate the TypeScript workspace:
+Start API:
 
 ```bash
-pnpm typecheck
-pnpm lint
-pnpm test
+pnpm --filter @bugzero/api dev
 ```
 
-## Important limitations
+Start worker:
 
-The current repository does not contain a general-purpose security analysis pipeline. SQL injection analysis is intentionally partial and only covers constructs documented in [docs/SECURITY.md](docs/SECURITY.md). The analysis pipeline has passed deterministic in-memory fixture tests, but live PostgreSQL migration, RLS, Redis/BullMQ, GitHub onboarding, API-to-worker integration, and Docker deployment have not been verified.
+```bash
+node --env-file=.env.local --import tsx apps/workers/src/worker.ts
+```
 
-For the authoritative architecture and schema guidance, see:
+Start frontend:
 
-- [docs/PRD.md](docs/PRD.md)
-- [docs/SYSTEM_DESIGN.md](docs/SYSTEM_DESIGN.md)
-- [docs/DATABASE_DESIGN.md](docs/DATABASE_DESIGN.md)
-- [docs/adr/README.md](docs/adr/README.md)
-- [packages/contracts/API_CONTRACTS.md](packages/contracts/API_CONTRACTS.md)
+```bash
+pnpm dev
+```
 
-## License
+Keep secrets such as `DATABASE_URL` and `GROQ_API_KEY` in `.env.local` and never commit them.
 
-This project is distributed under the MIT license.
+## Testing
+
+BugZero has been verified with real ZIP scenarios covering safe code, SQL Injection, SQL-like code without a sink, parameterized SQL, cross-file flows, mixed repositories, multiple findings, unresolved flows, realistic repositories, and edge cases.
+
+The verified path is:
+
+```text
+Real ZIP → Parser → Code IR → Analyzer → Finding
+         → Evidence → Risk → Database → API → Frontend
+```
+
+## Scope
+
+BugZero focuses on making its existing analysis pipeline **correct, explainable, evidence-backed, and trustworthy** rather than implementing every possible vulnerability or enterprise feature.
+
+> **Your code has a story. BugZero helps you understand it — with evidence, not guesses.**

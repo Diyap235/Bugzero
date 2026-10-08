@@ -23,12 +23,16 @@ import { structuralQualityAnalyzer } from '../src/analyzers/structural-quality/a
 import { sqlInjectionAnalyzer } from '../src/analyzers/security/sql-injection-analyzer.js';
 import { InMemorySourceAccess } from '../src/analyzers/source-access.js';
 import { AnalysisJobProcessor } from '../src/jobs/process-analysis-job.js';
+import { GroqInvestigator } from '../src/ai/groq/groq-client.js';
+
+const disabledAiInvestigator = new GroqInvestigator({ environment: {} });
 import { ImpactAnalysisEngine } from '../src/intelligence/impact-analysis.js';
 import type { RepositoryIntelligenceSnapshot } from '../src/intelligence/types.js';
 import type { AnalysisSourceFile } from '../src/jobs/process-analysis-job.js';
 import { MemoryEvidenceRepository } from './support/memory-evidence.js';
 import { MemoryRiskAssessmentRepository } from './support/memory-risk-assessments.js';
 import { MemoryHealthRepository } from './support/memory-health-repository.js';
+import { MLSignalAdapter } from '../src/ml/ml-signal-adapter.js';
 
 class MemoryFindingRepository {
   readonly findings = new Map<string, Finding>();
@@ -197,12 +201,20 @@ test('QUALITY_ANALYSIS job runs parser → persisted Code IR → Repository Inte
   const evidenceRepository = new MemoryEvidenceRepository();
   const riskRepository = new MemoryRiskAssessmentRepository();
   const healthMemoryRepository = new MemoryHealthRepository();
+  let failML = false;
+  let riskStateAtML: string | undefined;
+  const mlSignals = new MLSignalAdapter(async (functions) => {
+    riskStateAtML = JSON.stringify([...riskRepository.assessments.values()]);
+    if (failML) throw new Error('simulated model unavailable');
+    return functions.map(() => ({ model_version: 'v1', label: 'vulnerable', score: 0.87 }));
+  });
   const registry = new AnalyzerRegistry();
   registry.register(structuralQualityAnalyzer);
   registry.register(sqlInjectionAnalyzer);
   const orchestrator = new AnalyzerOrchestrator(registry, findingRepository, evidenceRepository, riskRepository);
 
   const processor = new AnalysisJobProcessor({
+    aiInvestigator: disabledAiInvestigator,
     analysis: {
       async getJob() { return job; },
       async getRun() { return run; },
@@ -306,8 +318,29 @@ test('QUALITY_ANALYSIS job runs parser → persisted Code IR → Repository Inte
       },
     },
     impact: new ImpactAnalysisEngine(),
-    orchestrator,
+    orchestrator: {
+      async execute(options) {
+        const result = await orchestrator.execute(options);
+        options.repositoryIntelligence?.entities.push({
+          id: 'ml-function-fixture',
+          organization_id: organizationId,
+          repository_id: repositoryId,
+          commit_id: commitId,
+          entity_key: 'ml-function-fixture',
+          entity_type: 'FUNCTION',
+          name: 'unsafe_query_fixture',
+          qualified_name: 'unsafe_query_fixture',
+          file_path: 'src/fixture.ts',
+          start_line: 1,
+          end_line: 1,
+          provenance: { language: 'Python' },
+          created_at: new Date(0).toISOString(),
+        });
+        return result;
+      },
+    },
     health: healthMemoryRepository,
+    mlSignals,
     sources: { async readCommit() { return sourceFiles; } },
   });
 
@@ -322,10 +355,25 @@ test('QUALITY_ANALYSIS job runs parser → persisted Code IR → Repository Inte
     ['LONG_FUNCTION', 'HIGH_PARAMETER_COUNT', 'HIGH_FAN_OUT', 'HIGH_FAN_IN', 'EMPTY_FUNCTION', 'SECURITY.SQL_INJECTION'],
   );
   assert.equal((coverage as { findings: number }).findings, 6);
-  assert.equal((run.coverage.pipeline as Record<string, unknown>).irEntityCount, persistedEntities.size);
+  assert.equal((run.coverage.pipeline as Record<string, unknown>).irEntityCount, persistedEntities.size + 1);
   assert.equal(evidenceRepository.graphs.size, 6);
   assert.equal(riskRepository.assessments.size, 6);
   assert.equal(healthMemoryRepository.snapshots.size, 1);
+  const firstPipeline = coverage as { mlSignals: {
+    status: string;
+    signals: Array<{ modelVersion: string; label: string; score: number; function: { filePath: string } }>;
+    functionsScored: number;
+  } };
+  assert.equal(firstPipeline.mlSignals.status, 'AVAILABLE');
+  assert.equal(firstPipeline.mlSignals.functionsScored, 1);
+  assert.equal(firstPipeline.mlSignals.signals[0]?.modelVersion, 'v1');
+  assert.equal(firstPipeline.mlSignals.signals[0]?.label, 'vulnerable');
+  assert.equal(firstPipeline.mlSignals.signals[0]?.score, 0.87);
+  assert.equal(firstPipeline.mlSignals.signals[0]?.function.filePath, 'src/fixture.ts');
+  const deterministicRiskState = JSON.stringify([...riskRepository.assessments.values()]);
+  assert.deepEqual(Object.keys(firstPipeline.mlSignals.signals[0] ?? {}).sort(), [
+    'function', 'label', 'modelVersion', 'score', 'timestamp',
+  ]);
   const healthSnapshot = [...healthMemoryRepository.snapshots.values()][0];
   assert.ok(healthSnapshot);
   assert.equal(healthSnapshot.commit_id, commitId);
@@ -388,6 +436,23 @@ test('QUALITY_ANALYSIS job runs parser → persisted Code IR → Repository Inte
   assert.ok(sqlInjectionGraph.nodes.some((node) => node.node_type === 'SOURCE'));
   assert.ok(sqlInjectionGraph.nodes.some((node) => node.node_type === 'SINK'));
   assert.ok(sqlInjectionGraph.nodes.every((node) => node.attributes.provenance === 'SECURITY_ANALYZER'));
+  assert.equal(sqlInjectionGraph.snapshot.authority, 'AUTHORITATIVE');
+  assert.equal(sqlInjectionGraph.snapshot.completeness, 'COMPLETE');
+  assert.equal(sqlInjectionGraph.snapshot.sufficiency, 'SUFFICIENT');
+  assert.equal(riskStateAtML, deterministicRiskState);
+
+  failML = true;
+  const unavailableCoverage = await processor.process({ organizationId, jobId });
+  const unavailablePipeline = unavailableCoverage as { status: string; mlSignals: { status: string; signals: unknown[] } };
+  assert.equal(unavailablePipeline.status, 'COMPLETED');
+  assert.equal(run.status, 'COMPLETED');
+  assert.equal(job.status, 'COMPLETED');
+  assert.equal(unavailablePipeline.mlSignals.status, 'UNAVAILABLE');
+  assert.equal(unavailablePipeline.mlSignals.signals.length, 0);
+  assert.equal(evidenceRepository.graphs.size, 6);
+  assert.equal(riskRepository.assessments.size, 6);
+  assert.equal(riskStateAtML, deterministicRiskState);
+  assert.equal(JSON.stringify([...riskRepository.assessments.values()]), deterministicRiskState);
   assert.ok(sqlInjectionGraph.edges.some((edge) => edge.relation === 'REACHES_SQL_SINK' && edge.resolution === 'EXACT'));
   assert.ok(sqlInjectionGraph.snapshot.paths[0]?.nodeIds.length);
   const sqlFinding = [...findingRepository.findings.values()].find((item) => item.rule_id === 'SECURITY.SQL_INJECTION');
@@ -491,6 +556,7 @@ test('analysis job scope does not widen when changed-file metadata is missing', 
   };
   let capturedScope: unknown;
   const processor = new AnalysisJobProcessor({
+    aiInvestigator: disabledAiInvestigator,
     analysis: {
       async getJob() { return job; },
       async getRun() { return run; },

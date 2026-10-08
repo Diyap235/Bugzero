@@ -38,7 +38,7 @@ export class InMemorySourceAccess implements SourceAccess {
     const lineCount = content.length === 0 ? 0 : content.split(/\r\n|\r|\n/).length;
     const extension = filePath.split('.').pop()?.toLowerCase();
     const language = extension === 'py' ? 'Python'
-      : extension === 'js' ? 'JavaScript'
+      : extension === 'js' || extension === 'jsx' ? 'JavaScript'
         : extension === 'ts' || extension === 'tsx' ? 'TypeScript'
           : undefined;
     return {

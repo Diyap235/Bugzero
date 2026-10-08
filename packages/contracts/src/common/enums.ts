@@ -5,7 +5,7 @@ export const Sha256 = z.string().regex(/^[a-f0-9]{64}$/i, 'Expected SHA-256 hex'
 export const GitCommitSha = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i, 'Expected Git commit SHA');
 
 export const OrganizationRole = z.enum(['OWNER','ADMIN','DEVELOPER','SECURITY_REVIEWER','VIEWER']);
-export const RepositoryProvider = z.enum(['GITHUB']);
+export const RepositoryProvider = z.enum(['GITHUB', 'LOCAL']);
 export const AnalysisStatus = z.enum(['NOT_STARTED','RUNNING','COMPLETED','PARTIAL','FAILED','UNAVAILABLE']);
 export const AnalysisStage = z.enum(['INGESTION','PARSING','CODE_IR','INTELLIGENCE','SECURITY_ANALYSIS','QUALITY_ANALYSIS','DEPENDENCY_ANALYSIS','EVIDENCE','RISK','AI_ENRICHMENT']);
 export const AnalysisScope = z.enum(['REPOSITORY','COMMIT','CHANGED_FILES','AFFECTED_SYMBOLS','PR']);
@@ -26,3 +26,4 @@ export const HealthCoverage = z.enum(['COMPLETE', 'PARTIAL', 'UNKNOWN']);
 export const AnalyzerType = z.enum(['STRUCTURAL','SECURITY','TAINT','DEPENDENCY','QUALITY']);
 export const JobState = z.enum(['QUEUED','RUNNING','COMPLETED','FAILED','RETRY','DEAD_LETTER','CANCELLED']);
 export const UserRole = OrganizationRole;
+export const AIInvestigationStatus = z.enum(['PENDING', 'COMPLETED', 'FAILED']);

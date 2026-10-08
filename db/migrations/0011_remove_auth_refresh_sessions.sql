@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE IF EXISTS auth_refresh_sessions ENABLE ROW LEVEL SECURITY;
+DROP TABLE IF EXISTS auth_refresh_sessions;
+
+COMMIT;

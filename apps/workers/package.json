@@ -5,21 +5,24 @@
   "type": "module",
   "exports": {
     "./analysis-queue": "./src/jobs/analysis-queue.ts",
+    "./ai/groq": "./src/ai/groq/groq-client.ts",
     "./github-provider": "./src/providers/github-provider.ts",
-    "./analysis-processor": "./src/jobs/process-analysis-job.ts"
+    "./analysis-processor": "./src/jobs/process-analysis-job.ts",
+    "./ml-signals": "./src/ml/ml-signal-adapter.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/**/*.test.ts",
-    "start": "node --import tsx src/worker.ts"
+    "start": "node --env-file=../../.env.local --import tsx src/worker.ts"
   },
   "dependencies": {
-    "@bugzero/contracts": "workspace:*",
     "@bugzero/config": "workspace:*",
+    "@bugzero/contracts": "workspace:*",
     "@bugzero/database": "workspace:*",
     "bullmq": "^5.0.0",
+    "groq-sdk": "^1.6.0",
     "ioredis": "^5.0.0",
     "typescript": "^5"
   },

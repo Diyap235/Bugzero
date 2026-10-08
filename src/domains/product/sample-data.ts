@@ -359,6 +359,7 @@ export const sampleFindingDetails: Record<string, FindingDetail> = Object.fromEn
       occurrence,
       evidence: isSqlInjection ? { snapshot: evidenceSnapshot, nodes: evidenceNodes, edges: evidenceEdges } : null,
       risks,
+      aiInvestigations: [],
     }];
   }),
 );

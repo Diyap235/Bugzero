@@ -59,6 +59,21 @@ test('invalid, expired, and wrong-audience tokens are rejected', async () => {
   assert.equal(await authenticateHeader(`Bearer ${createToken().slice(0, -2)}xx`), null);
 });
 
+test('signed tokens with invalid identity UUID claims are rejected', async () => {
+  const authenticate = createSignedTokenAuthenticator({
+    publicKey: keyPair.publicKey,
+    issuer: 'bugzero-auth',
+    audience: 'bugzero-api',
+    now: () => now,
+  });
+  const authenticateToken = (token: string) => authenticate({
+    headers: { authorization: `Bearer ${token}` },
+  } as Parameters<typeof authenticate>[0]);
+
+  assert.equal(await authenticateToken(createToken({ sub: 'not-a-uuid' })), null);
+  assert.equal(await authenticateToken(createToken({ org: 'not-a-uuid' })), null);
+});
+
 test('protected API requests reject missing authentication and deny users without organization membership', async () => {
   const authenticateToken = createSignedTokenAuthenticator({
     publicKey: keyPair.publicKey,
