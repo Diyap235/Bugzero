@@ -19,8 +19,8 @@ The implemented MVP scope includes:
 
 ## Outside the MVP scope
 
-The design defers broad security/dependency analysis, AI enrichment, autonomous fixes, and production-scale performance claims. Live PostgreSQL/Redis/Docker deployment, verified authentication, API repository onboarding, and real external end-to-end execution are not yet complete.
+The design defers broad security/dependency analysis, AI enrichment, autonomous fixes, and production-scale performance claims. The PostgreSQL-only queue/graph migration and end-to-end API/worker/database acceptance remain unverified.
 
 ## Summary
 
-The MVP has a tested in-memory analysis path and typed API boundaries. It is not yet production-ready or verified as a live API-to-worker-to-PostgreSQL/Redis product flow.
+The MVP has a tested analysis path and typed API boundaries. It is not yet production-ready or verified as a live API-to-worker-to-PostgreSQL product flow.

@@ -1,0 +1,6 @@
+def format_one(x): return str(x).strip()
+def format_two(x): return str(x).strip()
+def format_three(x): return str(x).strip()
+def format_four(x): return str(x).strip()
+def format_five(x): return str(x).strip()
+def format_six(x): return str(x).strip()

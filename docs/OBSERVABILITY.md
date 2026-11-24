@@ -20,6 +20,6 @@ The design calls for structured logging, traceability across analysis jobs, and 
 
 Analysis request and queue failures use Fastify structured logs with run/job IDs and error class only; credentials, raw source, and queue error text are not logged by the API route. Accepted requests log run ID, job ID, whether work was reused, and enqueue state.
 
-The worker logs BullMQ failure/error events. The analysis processor records parser diagnostics, parse/IR counts, stage timing, scope/impact information, per-analyzer status/metrics, findings count, and terminal pipeline status in the existing `analysis_runs.coverage` JSON. `GET /analysis/:runId` exposes this stored progress plus the current job stage/status/attempt/timestamps and a sanitized failure indicator.
+The worker logs PostgreSQL queue polling, lease-renewal, processing, and shutdown failures. The analysis processor records parser diagnostics, parse/IR counts, stage timing, scope/impact information, per-analyzer status/metrics, findings count, and terminal pipeline status in the existing `analysis_runs.coverage` JSON. `GET /analysis/:runId` exposes this stored progress plus the current job stage/status/attempt/timestamps and a sanitized failure indicator.
 
 No centralized tracing, metrics backend, or live deployment integration is present; those remain PARTIAL/PLANNED.

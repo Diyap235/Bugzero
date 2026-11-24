@@ -1,0 +1,143 @@
+"use client";
+
+import { AlertTriangle, LoaderCircle, RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
+import { ApiError } from "@/lib/api-client";
+
+export function PageHeading({ eyebrow, title, description, action }: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        {eyebrow && <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.16em] text-primary">{eyebrow}</p>}
+        <h1 className="break-words text-2xl font-semibold tracking-tight text-white">{title}</h1>
+        {description && <p className="mt-1 max-w-3xl text-sm leading-6 text-text-muted">{description}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+export function Metric({ label, value, detail, tone = "neutral" }: {
+  label: string;
+  value: string | number;
+  detail?: string;
+  tone?: "neutral" | "good" | "warning" | "danger";
+}) {
+  const tones = {
+    neutral: "text-white",
+    good: "text-emerald-300",
+    warning: "text-amber-300",
+    danger: "text-rose-300",
+  };
+  return (
+    <section className="min-w-0 rounded-xl border border-border bg-card p-4">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-text-muted">{label}</p>
+      <p className={`mt-2 break-words font-mono text-2xl font-semibold ${tones[tone]}`}>{value}</p>
+      {detail && <p className="mt-1 break-words text-xs text-text-muted">{detail}</p>}
+    </section>
+  );
+}
+
+export function StateMessage({ title, message, onRetry, action }: {
+  title: string;
+  message: string;
+  onRetry?: () => void;
+  action?: ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-border bg-card px-5 py-10 text-center" role="status">
+      {title === "Loading workspace" ? (
+        <LoaderCircle className="mx-auto h-5 w-5 animate-spin text-primary" aria-hidden="true" />
+      ) : (
+        <AlertTriangle className="mx-auto h-5 w-5 text-amber-300" aria-hidden="true" />
+      )}
+      <h2 className="mt-3 text-sm font-semibold text-white">{title}</h2>
+      <p className="mx-auto mt-1 max-w-2xl break-words text-sm leading-6 text-text-muted">{message}</p>
+      {onRetry && (
+        <button onClick={onRetry} className="mt-4 inline-flex min-h-9 items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-white hover:border-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /> Retry
+        </button>
+      )}
+      {action}
+    </section>
+  );
+}
+
+export function ResourceState({ loading, error, refreshError, empty, retry, emptyTitle = "No data available" }: {
+  loading: boolean;
+  error: Error | null;
+  refreshError?: Error | null;
+  empty: boolean;
+  retry?: () => void;
+  emptyTitle?: string;
+}) {
+  if (loading) return <StateMessage title="Loading view" message="Loading this page’s data…" />;
+  if (error) {
+    const state = error instanceof ApiError ? error.code : "NETWORK_ERROR";
+    const messages = {
+      UNAUTHORIZED: ["Sign-in required", "Your session is no longer authorized. Sign in again to continue."],
+      FORBIDDEN: ["Access denied", "Your account does not have permission to view this resource."],
+      NOT_FOUND: ["Resource not found", "The requested resource does not exist or is no longer available."],
+      SERVER_ERROR: ["Service temporarily unavailable", "The BugZero service could not complete this request. Try again later."],
+      HTTP_ERROR: ["Request could not be completed", "The BugZero service rejected this request."],
+      INVALID_RESPONSE: ["Invalid service response", "The BugZero service returned data that could not be read."],
+      NETWORK_ERROR: ["Workspace data unavailable", "The BugZero service could not be reached. Check the service and try again."],
+    } as const;
+    const [title, message] = messages[state];
+    return <StateMessage title={title} message={message} onRetry={retry} />;
+  }
+  if (refreshError) {
+    return (
+      <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-800/60 bg-amber-950/20 px-4 py-3 text-xs text-amber-100">
+        <span>Showing previously loaded data; the latest refresh failed. Try again to check for updates.</span>
+        {retry && <button onClick={retry} className="rounded border border-amber-800/70 px-3 py-1.5 font-medium hover:bg-amber-900/30">Retry</button>}
+      </div>
+    );
+  }
+  if (empty) return <StateMessage title={emptyTitle} message="There are no records to show for this view yet." />;
+  return null;
+}
+
+export function StatusLabel({ value }: { value: string | null | undefined }) {
+  const status = value ?? "UNKNOWN";
+  const tone = status === "COMPLETED" || status === "COMPLETE" || status === "RESOLVED"
+    || status === "AUTHORITATIVE" || status === "EXCELLENT" || status === "GOOD"
+    ? "border-emerald-700/50 bg-emerald-950/40 text-emerald-200"
+    : status === "FAILED" || status === "INCOMPLETE" || status === "CRITICAL" || status === "POOR"
+      || status === "INVESTIGATIVE"
+      ? "border-rose-800/60 bg-rose-950/30 text-rose-200"
+      : status === "RUNNING" || status === "PARTIAL" || status === "FAIR" || status === "QUEUED"
+        ? "border-amber-700/50 bg-amber-950/30 text-amber-200"
+        : "border-border bg-background text-text-secondary";
+  return <span className={`inline-flex max-w-full items-center rounded-md border px-2 py-1 font-mono text-[10px] leading-4 ${tone}`}>{status.replaceAll("_", " ")}</span>;
+}
+
+export function UnknownValue({ explanation }: { explanation?: string | null }) {
+  return (
+    <span className="inline-flex flex-col items-start gap-1 text-text-muted">
+      <span className="font-mono text-sm">Unknown</span>
+      {explanation && <span className="text-xs leading-5">{explanation}</span>}
+    </span>
+  );
+}
+
+export function formatTimestamp(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+export function formatDuration(start: string | null | undefined, end: string | null | undefined): string {
+  if (!start || !end) return "—";
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  return ms < 60_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.floor(ms / 60_000)}m ${Math.floor((ms % 60_000) / 1000)}s`;
+}

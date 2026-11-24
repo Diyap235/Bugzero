@@ -15,9 +15,9 @@
 }
 ```
 
-The API derives organization and user from a trusted authentication adapter, checks membership and role, loads the tenant-scoped repository and indexed commit, resolves the existing analysis profile (creating the configured default profile if needed), atomically creates or reuses active run/job work, and enqueues `{ "organizationId": "...", "jobId": "..." }`. It returns **202 Accepted** with `analysisRunId`, `jobId`, and queued job `status`. It does not parse source or run analysis synchronously.
+The API derives organization and user from a trusted authentication adapter, checks membership and role, loads the tenant-scoped repository and indexed commit, resolves the existing analysis profile (creating the configured default profile if needed), and atomically creates or reuses active run/job work in PostgreSQL. The committed `analysis_jobs` row is the durable queue entry. It returns **202 Accepted** with `analysisRunId`, `jobId`, and queued job `status`. It does not parse source or run analysis synchronously.
 
-If the indexed commit is unavailable, the endpoint returns 404 rather than selecting another revision. If Redis enqueue fails, the API marks the job and run `FAILED`, records an enqueue failure code in run coverage, and returns 503. A failure to persist that state is logged and returns 500.
+If the indexed commit is unavailable, the endpoint returns 404 rather than selecting another revision. If PostgreSQL cannot persist the run and job, the request fails; it never returns accepted before the durable transaction commits. Workers claim jobs using row locks with `SKIP LOCKED`, persisted retry limits, bounded leases, and lease-fenced status updates.
 
 Repeated requests for the same organization, repository, commit, profile version, and scope reuse existing active work. Once prior work is terminal, an explicit repeated request can create a new run.
 
@@ -27,11 +27,11 @@ Repeated requests for the same organization, repository, commit, profile version
 
 ## Runtime and limitations
 
-`createApiServer` and `startApiServer` require an `authenticate(request)` adapter that returns a verified user and organization context. By default, the executable API uses `jose` to verify EdDSA JWT signatures against `AUTH_PUBLIC_KEY`, and validates `iss=bugzero-auth` and `aud=bugzero-api`; a trusted custom module can be selected with `AUTH_ADAPTER_MODULE`. Run `pnpm --filter @bugzero/api dev-auth:setup` locally to create an Ed25519 keypair, store its private key outside the repository at `~/.bugzero/dev-auth/ed25519-private.pem`, and write the public key to the ignored root `.env.local`. First-party registration/login issues short-lived JWTs with UUID `sub` (user) and `org` (workspace) claims. Production must supply the matching `AUTH_PRIVATE_KEY` from a secret manager. API membership and role checks remain authoritative.
+`createApiServer` and `startApiServer` require an `authenticate(request)` dependency that returns a verified user and organization context. The executable API always uses the built-in `jose` EdDSA JWT verifier with `AUTH_PUBLIC_KEY`, and validates `iss=bugzero-auth` and `aud=bugzero-api`; its runtime does not support replacing the verifier. Run `pnpm --filter @bugzero/api dev-auth:setup` locally to create an Ed25519 keypair, store its private key outside the repository at `~/.bugzero/dev-auth/ed25519-private.pem`, and write the public key to the ignored root `.env.local`. First-party registration/login issues short-lived JWTs with UUID `sub` (user) and `org` (workspace) claims. Production must supply the matching `AUTH_PRIVATE_KEY` from a secret manager. API membership and role checks remain authoritative.
 
-`POST /auth/signup` persists the new user, scrypt password hash, workspace, and OWNER membership atomically. The signup form derives a workspace name from the supplied name; the account and workspace are created together. `POST /auth/register` remains an API-compatible alias. `POST /auth/login` verifies the stored scrypt hash and the user's persisted workspace membership before signing a token. `GET /auth/session` verifies the JWT and confirms that its user still belongs to the token's organization before returning persisted workspace details. Caller-supplied organization identifiers are never trusted. `REDIS_URL` is required and shared with the worker through `@bugzero/config`; there is no localhost fallback.
+`POST /auth/signup` persists the new user, scrypt password hash, workspace, and OWNER membership atomically. The signup form derives a workspace name from the supplied name; the account and workspace are created together. `POST /auth/register` remains an API-compatible alias. `POST /auth/login` verifies the stored scrypt hash and the user's persisted workspace membership before signing a token. `GET /auth/session` verifies the JWT and confirms that its user still belongs to the token's organization before returning persisted workspace details. Caller-supplied organization identifiers are never trusted.
 
-The API queue adapter imports only the canonical queue transport from the worker package; it does not import or execute `AnalysisJobProcessor`. The actual source processing remains worker-only. Live PostgreSQL/Redis and API-to-worker E2E behavior have been verified locally (2026-10-08); see `apps/api/tests/integration/live-backend.test.ts`.
+The API does not import or execute `AnalysisJobProcessor`; source processing remains worker-only. PostgreSQL is the only queue transport and database. The live API-to-worker integration suite is opt-in and requires an explicitly disposable database with the latest migrations applied; it has not been run as part of this change.
 
 ## Product read operations
 
@@ -45,7 +45,14 @@ The current product routes are:
 - `GET /findings/:findingId` (includes the selected occurrence, evidence graph, risk assessments, and validated advisory AI investigation records tied to that occurrence/evidence snapshot)
 - `GET /repositories/:repositoryId/health`
 - `GET /repositories/:repositoryId/reports` (persisted report summaries)
+- `POST /repositories/:repositoryId/reports` with an `analysisRunId` (create or return the persisted JSON report for a COMPLETED or PARTIAL run)
+- `GET /reports/:reportId` (tenant-scoped persisted report document)
 
-Reports can be listed, but report generation/download is not implemented.
+Report documents are assembled from persisted analysis-run findings, finding occurrences,
+evidence, and health snapshots. Repeating a generation request returns the existing report
+for that run without rerunning analysis or invoking AI. Missing data remains Unknown;
+reports do not infer unpersisted scores or descriptions. PDF, JSON, and findings CSV files
+are generated by the authenticated web workspace from the same report document shown in
+the preview.
 
-The optional worker-only Groq investigator is configured with `GROQ_API_KEY` and `GROQ_MODEL`. It runs after deterministic analysis for persisted findings, and is not required for analysis. Its structured output is advisory and cannot modify findings, evidence, risk, or run status. Provider failures are isolated and replay reuses the persisted result for the same occurrence, evidence, model, and prompt version. See [ADR-007](adr/ADR-007-ai-boundary.md) and [SECURITY.md](SECURITY.md).
+The optional worker-side advisory review is configured with `NVIDIA_API_KEY` and `NVIDIA_MODEL`. It examines bounded source excerpts and available dependency manifests after deterministic analysis. Estimates require checked source citations, and dependency estimates require manifest evidence. Failures do not discard completed deterministic results. AI provider and model details are excluded from frontend responses. See [ADR-007](adr/ADR-007-ai-boundary.md) and [SECURITY.md](SECURITY.md).

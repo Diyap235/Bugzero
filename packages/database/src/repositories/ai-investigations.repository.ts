@@ -10,7 +10,8 @@ export type AIInvestigationErrorCode =
   | 'RATE_LIMITED'
   | 'PROVIDER_ERROR'
   | 'INVALID_RESPONSE'
-  | 'CONTEXT_TOO_LARGE';
+  | 'CONTEXT_TOO_LARGE'
+  | 'INSUFFICIENT_SOURCE';
 
 export interface AIInvestigationRecord {
   id: string;
@@ -18,7 +19,7 @@ export interface AIInvestigationRecord {
   finding_id: string;
   finding_occurrence_id: string;
   evidence_id: string;
-  provider: 'GROQ';
+  provider: 'NVIDIA' | 'GROQ';
   model: string;
   prompt_version: string;
   idempotency_key: string | null;
@@ -35,7 +36,7 @@ export interface CreateAIInvestigationInput {
   findingId: string;
   findingOccurrenceId: string;
   evidenceId: string;
-  provider: 'GROQ';
+  provider: 'NVIDIA' | 'GROQ';
   model: string;
   promptVersion: string;
   idempotencyKey: string;

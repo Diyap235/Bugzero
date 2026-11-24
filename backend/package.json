@@ -1,0 +1,36 @@
+{
+  "name": "@bugzero/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/server.ts",
+    "./analysis": "./src/modules/analysis/routes.ts"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=../.env.local --import tsx --watch src/start.ts",
+    "dev-auth:setup": "tsx src/auth/dev-issuer.ts setup",
+    "start": "node --env-file-if-exists=../.env.local --import tsx src/start.ts",
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/**/*.test.ts"
+  },
+  "dependencies": {
+    "@bugzero/config": "workspace:*",
+    "@bugzero/contracts": "workspace:*",
+    "@bugzero/database": "workspace:*",
+    "fastify": "^5.0.0",
+    "jose": "^6.2.12",
+    "yauzl": "^3.4.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@bugzero/workers": "workspace:*",
+    "@types/node": "^20",
+    "@types/yauzl": "^3.4.0",
+    "eslint": "^8",
+    "tsx": "^4.19.1",
+    "typescript": "^5"
+  }
+}

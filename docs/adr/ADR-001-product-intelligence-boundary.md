@@ -1,6 +1,6 @@
 # ADR-001 — Product Platform / Intelligence Boundary
 
-- **Status:** Accepted
+- **Status:** Accepted; parser ownership superseded by the current TypeScript worker implementation
 - **Date:** 2026-10-07
 - **Decision:** TypeScript owns the product platform; Python owns code intelligence.
 
@@ -8,7 +8,7 @@
 BugZero needs a stable SaaS/product layer and a language-analysis layer with different scaling and ecosystem needs.
 
 ## Decision
-Use Next.js/React/TypeScript for the web product, Fastify/TypeScript for the API and product orchestration, and Python for parsing, Code IR construction, static/security analysis, evidence generation, and AI orchestration.
+Use Next.js/React/TypeScript for the web product and Fastify/TypeScript for the API and product orchestration. The current bounded parser and deterministic analysis pipeline run in the TypeScript worker. Introduce Python parsing/code-intelligence components only when a concrete parser or library requirement justifies the separate runtime; do not maintain an unused placeholder engine.
 
 The boundary is contract-driven. TypeScript does not embed Python internals, and Python does not own product workflows, tenancy, authentication, or UI concerns.
 

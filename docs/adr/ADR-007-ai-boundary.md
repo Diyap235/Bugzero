@@ -8,11 +8,11 @@
 AI can help explain a persisted finding, but unconstrained repository scanning is unsafe, expensive, and difficult to reproduce.
 
 ## Decision
-The optional worker-side Groq investigator runs only after deterministic analysis and health assessment. For each persisted finding with a matching occurrence and evidence snapshot, it receives finding metadata, bounded evidence graph elements and paths, and short source snippets near recorded evidence locations. It does not receive the whole repository, dependency inventory, or analysis history.
+The optional worker-side advisory review runs after deterministic analysis. It receives a bounded selection of repository source excerpts and available dependency manifests; persisted finding explanations also receive bounded evidence graph elements and snippets around their recorded evidence.
 
-The response is strict-schema validated and stored as an advisory AI investigation associated with the finding occurrence and evidence snapshot. It is not a finding, evidence node, confirmation, disposition, or risk input. If the deterministic run or evidence is incomplete, the returned reasoning status is forced to `INSUFFICIENT_EVIDENCE`. Missing configuration, provider errors, malformed output, and timeouts are recorded as safe statuses and must not change deterministic analysis status.
+The response is strict-schema validated. Repository suggestions and estimated health scores are advisory and distinct from deterministic scores, findings, evidence, and risk. Scores require citations to submitted files at valid line numbers; dependency scores require manifest citations. Per-finding explanations remain associated with the finding occurrence and evidence snapshot. Missing configuration, service errors, malformed output, and timeouts must not change deterministic results.
 
-Groq is optional and configured only in the worker environment with `GROQ_API_KEY` and `GROQ_MODEL`. Context, output tokens, source snippets, evidence graph elements, request timeout, and retries are bounded. Selected credential-like source assignments, bearer tokens, and private-key blocks are redacted, and sensitive paths are excluded; this is a best-effort minimization boundary, not a general-purpose secret scanner.
+The NVIDIA API is optional and configured only in the worker environment with `NVIDIA_API_KEY` and `NVIDIA_MODEL`. Context, output tokens, excerpts, request timeout, and retries are bounded. Selected credential-like assignments, bearer tokens, URL credentials, private-key blocks, and sensitive paths are redacted or excluded. This is a best-effort minimization boundary, not a general-purpose secret scanner.
 
 Risk and technical severity remain deterministic. Human disposition remains separate from machine conclusions. API readback exposes only validated structured results and safe status/error codes for the current occurrence/evidence pair.
 

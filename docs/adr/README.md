@@ -1,6 +1,6 @@
 # BugZero Architecture Decision Records
 
-Status: Accepted — 2026-10-07
+This index contains current and superseded decisions. ADR-017 is the current runtime persistence and job-queue decision.
 
 These ADRs encode the decisions required by `docs/SYSTEM_DESIGN.md`. Implementation must not silently contradict an accepted ADR.
 
@@ -11,7 +11,7 @@ These ADRs encode the decisions required by `docs/SYSTEM_DESIGN.md`. Implementat
 | [ADR-003-code-ir.md](ADR-003-code-ir.md) | ADR-003 — Semantic Code IR |
 | [ADR-004-finding-identity.md](ADR-004-finding-identity.md) | ADR-004 — Hybrid Semantic Finding Identity |
 | [ADR-005-evidence-model.md](ADR-005-evidence-model.md) | ADR-005 — Versioned Evidence Graph with Two-Tier Authority |
-| [ADR-006-analysis-jobs.md](ADR-006-analysis-jobs.md) | ADR-006 — Redis + BullMQ Adaptive Analysis Jobs |
+| [ADR-006-analysis-jobs.md](ADR-006-analysis-jobs.md) | ADR-006 — Redis + BullMQ Adaptive Analysis Jobs (Superseded) |
 | [ADR-007-ai-boundary.md](ADR-007-ai-boundary.md) | ADR-007 — Evidence-Scoped AI Enrichment |
 | [ADR-008-incremental-impact-analysis.md](ADR-008-incremental-impact-analysis.md) | ADR-008 — Incremental and Impact-Based Analysis |
 | [ADR-009-progressive-analysis.md](ADR-009-progressive-analysis.md) | ADR-009 — Progressive Large-Repository Analysis |
@@ -21,3 +21,5 @@ These ADRs encode the decisions required by `docs/SYSTEM_DESIGN.md`. Implementat
 | [ADR-013-docker-compose-v1.md](ADR-013-docker-compose-v1.md) | ADR-013 — Docker Compose v1 Deployment |
 | [ADR-014-observability.md](ADR-014-observability.md) | ADR-014 — OpenTelemetry-Centered Observability |
 | [ADR-015-human-machine-review-boundary.md](ADR-015-human-machine-review-boundary.md) | ADR-015 — Separate Machine Assessment from Human Disposition |
+| [ADR-016-postgresql-neo4j-engine.md](ADR-016-postgresql-neo4j-engine.md) | ADR-016 — PostgreSQL Product State and Neo4j Code Graph (Superseded) |
+| [ADR-017-postgresql-only-runtime.md](ADR-017-postgresql-only-runtime.md) | ADR-017 — PostgreSQL-Only Runtime and Durable Analysis Queue |

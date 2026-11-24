@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { defaultAnalysisProfile } from '@bugzero/config';
 
 import { getDatabasePool } from '../client/postgres.js';
-import { setTransactionOrganizationContext } from '../client/tenant-context.js';
+import { getAnalysisJobLeaseContext, setTransactionOrganizationContext } from '../client/tenant-context.js';
 
 export type AnalysisScope = 'REPOSITORY' | 'COMMIT' | 'CHANGED_FILES' | 'AFFECTED_SYMBOLS' | 'PR';
 export type AnalysisRunStatus = 'NOT_STARTED' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'UNAVAILABLE';
@@ -189,7 +189,7 @@ export class AnalysisRepository {
 
   async listRunsByRepository(organizationId: string, repositoryId: string): Promise<AnalysisRun[]> {
     const result = await this.pool.query<AnalysisRun>(
-      'SELECT * FROM analysis_runs WHERE organization_id = $1 AND repository_id = $2 ORDER BY created_at DESC',
+      'SELECT * FROM analysis_runs WHERE organization_id = $1 AND repository_id = $2 ORDER BY created_at DESC, id DESC',
       [organizationId, repositoryId],
     );
 
@@ -322,6 +322,10 @@ export class AnalysisRepository {
     status: AnalysisJobStatus,
     attempt?: number,
   ): Promise<AnalysisJob> {
+    const lease = getAnalysisJobLeaseContext();
+    if (lease && (lease.organizationId !== organizationId || lease.jobId !== jobId)) {
+      throw new Error('Analysis job update does not match the active worker lease');
+    }
     const result = await this.pool.query<AnalysisJob>(
       `UPDATE analysis_jobs
        SET status = $3,
@@ -329,17 +333,25 @@ export class AnalysisRepository {
            started_at = CASE WHEN $3 = 'RUNNING' THEN COALESCE(started_at, now()) ELSE started_at END,
            finished_at = CASE WHEN $3 IN ('COMPLETED', 'FAILED', 'DEAD_LETTER', 'CANCELLED') THEN now() ELSE NULL END
        WHERE organization_id = $1 AND id = $2
+         AND ($5::uuid IS NULL OR (lease_owner = $5 AND lease_expires_at > now()))
        RETURNING *`,
-      [organizationId, jobId, status, attempt ?? null],
+      [organizationId, jobId, status, attempt ?? null, lease?.leaseOwner ?? null],
     );
     if (!result.rows[0]) throw new Error(`Analysis job ${jobId} was not found`);
     return result.rows[0];
   }
 
   async updateJobStage(organizationId: string, jobId: string, stage: AnalysisJobStage): Promise<AnalysisJob> {
+    const lease = getAnalysisJobLeaseContext();
+    if (lease && (lease.organizationId !== organizationId || lease.jobId !== jobId)) {
+      throw new Error('Analysis job update does not match the active worker lease');
+    }
     const result = await this.pool.query<AnalysisJob>(
-      `UPDATE analysis_jobs SET stage = $3 WHERE organization_id = $1 AND id = $2 RETURNING *`,
-      [organizationId, jobId, stage],
+      `UPDATE analysis_jobs SET stage = $3
+       WHERE organization_id = $1 AND id = $2
+         AND ($4::uuid IS NULL OR (lease_owner = $4 AND lease_expires_at > now()))
+       RETURNING *`,
+      [organizationId, jobId, stage, lease?.leaseOwner ?? null],
     );
     if (!result.rows[0]) throw new Error(`Analysis job ${jobId} was not found`);
     return result.rows[0];
@@ -351,6 +363,10 @@ export class AnalysisRepository {
     status: AnalysisRunStatus,
     coverage: Record<string, unknown>,
   ): Promise<AnalysisRun> {
+    const lease = getAnalysisJobLeaseContext();
+    if (lease && lease.organizationId !== organizationId) {
+      throw new Error('Analysis run update does not match the active worker organization');
+    }
     const result = await this.pool.query<AnalysisRun>(
       `UPDATE analysis_runs
        SET status = $3,
@@ -358,10 +374,20 @@ export class AnalysisRepository {
            started_at = CASE WHEN $3 = 'RUNNING' THEN COALESCE(started_at, now()) ELSE started_at END,
            completed_at = CASE WHEN $3 IN ('COMPLETED', 'PARTIAL', 'FAILED', 'UNAVAILABLE') THEN now() ELSE NULL END
        WHERE organization_id = $1 AND id = $2
+         AND (
+           $5::uuid IS NULL
+           OR EXISTS (
+             SELECT 1 FROM analysis_jobs
+             WHERE organization_id = $1 AND run_id = $2
+               AND id = $6 AND lease_owner = $5 AND lease_expires_at > now()
+           )
+         )
        RETURNING *`,
-      [organizationId, runId, status, coverage],
+      [organizationId, runId, status, coverage, lease?.leaseOwner ?? null, lease?.jobId ?? null],
     );
-    if (!result.rows[0]) throw new Error(`Analysis run ${runId} was not found`);
+    if (!result.rows[0]) {
+      throw new Error(`Analysis run ${runId} was not found or its worker lease is no longer active`);
+    }
     return result.rows[0];
   }
 }

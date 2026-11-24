@@ -1,6 +1,6 @@
-# ADR-006 — Redis + BullMQ Adaptive Analysis Jobs
+# ADR-006 — Redis + BullMQ Adaptive Analysis Jobs (Superseded)
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-017
 - **Date:** 2026-10-07
 - **Decision:** Use Redis + BullMQ with adaptive hierarchical jobs and mandatory idempotency.
 

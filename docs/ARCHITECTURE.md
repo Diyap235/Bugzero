@@ -1,48 +1,29 @@
-# BugZero architecture summary
-
-## Status
-
-The deterministic Structural/Quality analysis worker is implemented. API-to-queue request handling is implemented behind a required trusted-authentication resolver; this repository does not yet provide the production identity/token verifier that supplies that resolver. PostgreSQL, Redis, API, and worker runtime deployment is not validated here.
+# BugZero architecture
 
 ## Runtime flow
 
 ```text
-Client
-  -> Fastify API (authenticated principal + organization membership)
-  -> indexed repository + exact commit + analysis profile
-  -> PostgreSQL transaction: analysis_run + analysis_job
-  -> Redis / BullMQ: { organizationId, jobId }
-  -> worker consumer
-  -> parser / Code IR persistence
-  -> Repository Intelligence / impact scope
-  -> Structural/Quality analyzer
-  -> Security analyzer (SQL_INJECTION)
-  -> FindingRepository / FindingOccurrence
-  -> immutable evidence snapshot / nodes / edges / paths
-  -> deterministic Risk Engine v1 assessment
-  -> immutable Risk Assessment / current-risk projection
-  -> Repository Health aggregation / immutable revision snapshot
-  -> analysis run/job status and coverage
+Authenticated API
+  -> tenant-scoped PostgreSQL transaction (analysis_run + analysis_job)
+  -> PostgreSQL job queue (FOR UPDATE SKIP LOCKED, bounded attempts and leases)
+  -> worker reads the exact indexed repository commit
+  -> language adapters / run-scoped Code IR
+  -> PostgreSQL code entities, relationships, dependencies and data-flow edges
+  -> repository intelligence and deterministic analyzers
+  -> evidence validation -> persisted findings and evidence
+  -> deterministic risk and health calculations -> PostgreSQL snapshots
+  -> authenticated API and existing UI
+  -> optional investigative ML signals / advisory AI explanations
 ```
 
-The API enqueues only small identifiers and never reads or executes repository source. The worker reads the exact persisted Git commit. PostgreSQL remains canonical; queue state is transport state. The single queue is `bugzero-analysis-jobs`; API and worker use the same required `REDIS_URL` configuration.
+PostgreSQL is the sole runtime persistence and queue system. The API creates durable run/job records in one transaction; no second enqueue operation can fail after that transaction commits. Workers atomically claim work using `SKIP LOCKED`, renew a bounded lease, and fence status updates with the lease token. Expired work is retried up to its persisted attempt limit with bounded backoff; exhausted jobs are marked dead-letter and their run is failed explicitly.
+
+All code graph records are scoped by organization, repository, commit, and analysis run. PostgreSQL RLS remains enabled and forced. A narrow worker queue policy allows workers to discover jobs across tenants; processing and all other tenant data access run under the claimed job's organization context. Graph writes use deterministic IDs and run-scoped uniqueness for safe replays. Migration `0014_postgres_queue_and_code_graph.sql` retains prior rows with a null run association and adds the new run-scoped relationships without resetting data.
+
+Deterministic analysis remains authoritative. ML may add investigative signals; AI may produce advisory explanations only. Neither can create or confirm authoritative findings, evidence, risk, or health. Unsupported parsing and incomplete evidence remain visible as partial coverage.
 
 ## Component status
 
-| Capability | Status |
-|---|---|
-| Repository ingestion and commit snapshots | IMPLEMENTED |
-| API analysis create/status routes | IMPLEMENTED behind trusted authentication adapter |
-| API-side trusted identity/token provider | PARTIAL / NOT PRESENT in this repository |
-| Analysis-run/job transaction and active-work deduplication | IMPLEMENTED |
-| BullMQ producer/worker consumer contract | IMPLEMENTED |
-| Semantic Code IR, Repository Intelligence, impact analysis | IMPLEMENTED with documented parser limits |
-| Structural/Quality Analyzer v1 and finding persistence | IMPLEMENTED |
-| Deterministic finding evidence graph | IMPLEMENTED (bounded; see [EVIDENCE.md](EVIDENCE.md)) |
-| Deterministic Risk Engine v1 | IMPLEMENTED (versioned, evidence-aware, bounded score; live behavior verified; see [RISK.md](RISK.md)) |
-| Repository Health v1 | IMPLEMENTED (deterministic Security/Quality/Maintainability aggregation; Dependency/Reliability UNKNOWN; live behavior verified; see [HEALTH.md](HEALTH.md)) |
-| Live PostgreSQL migration and API-to-worker deployment | VERIFIED (local, 2026-10-08) |
-| SQL injection security rule v1 | IMPLEMENTED (partial language/data-flow coverage; see [SECURITY.md](SECURITY.md)) |
-| Other Security/Taint families, dependency CVE analysis, AI | DEFERRED |
+The PostgreSQL-backed queue and code-graph implementation is being introduced by migration 0014 and its focused unit tests. It is not live-validated against the configured application database in this worktree. Do not claim production migration or end-to-end acceptance until migration 0014, database-backed queue concurrency/retry behavior, and authenticated API readback are verified against a disposable or explicitly approved database.
 
-See [API.md](API.md), [ANALYZERS.md](ANALYZERS.md), [CODE_IR.md](CODE_IR.md), [FINDINGS.md](FINDINGS.md), [HEALTH.md](HEALTH.md), and [OBSERVABILITY.md](OBSERVABILITY.md) for exact boundaries.
+See [API.md](API.md), [ANALYZERS.md](ANALYZERS.md), [CODE_IR.md](CODE_IR.md), [DATABASE_DESIGN.md](DATABASE_DESIGN.md), [FINDINGS.md](FINDINGS.md), [HEALTH.md](HEALTH.md), and [OBSERVABILITY.md](OBSERVABILITY.md) for detailed contracts.

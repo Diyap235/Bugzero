@@ -1,0 +1,28 @@
+{
+  "name": "@bugzero/database",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "migrate": "node --env-file-if-exists=../../.env.local --import tsx src/migrate.ts"
+  },
+  "dependencies": {
+    "@bugzero/config": "workspace:*",
+    "@bugzero/contracts": "workspace:^",
+    "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/pg": "^8.11.5",
+    "eslint": "^8",
+    "tsx": "^4.20.3",
+    "typescript": "^5"
+  }
+}

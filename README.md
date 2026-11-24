@@ -17,7 +17,7 @@ Deterministic Analysis
     ↓
 Findings + Evidence + Risk
     ↓
-Optional ML Signal / Groq Investigation
+Optional ML Signal / NVIDIA-assisted Review
     ↓
 PostgreSQL → API → Frontend
 ```
@@ -43,7 +43,7 @@ PostgreSQL → API → Frontend
 - Code health and analysis history
 - Finding Intelligence
 - Optional ML investigative signal
-- Optional Groq investigation
+- Optional NVIDIA-assisted source review and score estimates
 - JWT authentication
 
 ## Security Analysis
@@ -62,7 +62,7 @@ SQL-looking code without a real sink is not automatically reported.
 
 **ML:** Provides an investigative signal for supported Python functions and methods. It cannot create findings or modify deterministic evidence or risk.
 
-**Groq:** Provides bounded investigation, explanation, and remediation guidance. It cannot create authoritative findings or change deterministic evidence and risk.
+**NVIDIA-assisted review:** Examines bounded source and dependency-manifest excerpts and provides cited suggestions and explicitly estimated health scores. It cannot create authoritative findings or change deterministic evidence and risk.
 
 ## Architecture
 
@@ -71,7 +71,7 @@ Frontend
    ↓
 API
    ├── PostgreSQL
-   └── Redis / BullMQ
+   └── PostgreSQL durable queue
              ↓
            Worker
              ↓
@@ -83,7 +83,7 @@ API
              ↓
     Finding / Evidence / Risk
              ↓
-       ML / Groq (optional)
+       ML / NVIDIA-assisted review (optional)
 ```
 
 ## Tech Stack
@@ -91,17 +91,17 @@ API
 - **Frontend:** Next.js, React, TypeScript
 - **API:** Node.js, TypeScript
 - **Worker:** Node.js, TypeScript
-- **Database:** PostgreSQL
-- **Queue:** Redis + BullMQ
+- **Database:** Neon PostgreSQL
+- **Queue:** PostgreSQL-backed atomic job claiming, retries, and leases
 - **Code Intelligence:** Python + TypeScript
 - **ML:** CodeBERT + scikit-learn
-- **AI:** Groq
+- **AI:** NVIDIA API (worker-side only)
 - **Auth:** JWT / Ed25519
 - **Package Manager:** pnpm
 
 ## Local Development
 
-Requirements: Node.js, pnpm, Python, PostgreSQL, and a Redis-compatible server.
+Requirements: Node.js 22.9 or newer, pnpm, Python, and a Neon development branch. A local PostgreSQL server is not required.
 
 Install:
 
@@ -115,11 +115,9 @@ Start API:
 pnpm --filter @bugzero/api dev
 ```
 
-Start worker:
-
-```bash
-node --env-file=.env.local --import tsx apps/workers/src/worker.ts
-```
+In development, the API starts the local worker automatically. Do not start a
+second standalone worker alongside it. Production deployments should run the
+API and a standalone worker as separate processes.
 
 Start frontend:
 
@@ -127,11 +125,11 @@ Start frontend:
 pnpm dev
 ```
 
-Keep secrets such as `DATABASE_URL` and `GROQ_API_KEY` in `.env.local` and never commit them.
+The API and worker require `DATABASE_URL` for tenant-scoped analysis. The worker additionally requires `DATABASE_QUEUE_URL` and `DATABASE_QUEUE_LOCK_URL` for queue claims; both must use the dedicated, non-`BYPASSRLS` `bugzero_queue_worker` login. Apply migrations to the intended Neon development branch before starting either service. Use `DATABASE_URL_UNPOOLED` only for migration execution. Keep database URLs and `NVIDIA_API_KEY` in `.env.local` or a secret manager and never commit them. See [deployment and environment setup](docs/DEPLOYMENT.md).
 
 ## Testing
 
-BugZero has been verified with real ZIP scenarios covering safe code, SQL Injection, SQL-like code without a sink, parameterized SQL, cross-file flows, mixed repositories, multiple findings, unresolved flows, realistic repositories, and edge cases.
+The offline test suite covers ZIP ingestion, safe and vulnerable SQL examples, evidence, risk and health formulas, job retries, and relational graph persistence. Live database migration, tenant-isolation, queue-role, and end-to-end API/UI acceptance require a disposable Neon branch with all ordered migrations applied and the dedicated queue-worker login configured; those checks are not implied by the unit suite.
 
 The verified path is:
 

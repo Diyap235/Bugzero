@@ -1,7 +1,17 @@
 import type { Pool } from 'pg';
 
 import { getDatabasePool } from '../client/postgres.js';
-import { setTransactionOrganizationContext } from '../client/tenant-context.js';
+import { getOrganizationContext, setTransactionOrganizationContext } from '../client/tenant-context.js';
+
+function assertOrganizationContext(organizationId: string): void {
+  const contextOrganizationId = getOrganizationContext();
+  if (!contextOrganizationId) {
+    throw new Error('Repository access requires an active organization context');
+  }
+  if (contextOrganizationId !== organizationId) {
+    throw new Error('Repository organization does not match the active organization context');
+  }
+}
 
 export interface RepositoryRecord {
   id: string;
@@ -61,6 +71,7 @@ export class RepositoryRepository {
   constructor(private readonly pool: Pool = getDatabasePool()) {}
 
   async getById(organizationId: string, repositoryId: string): Promise<RepositoryRecord | null> {
+    assertOrganizationContext(organizationId);
     const result = await this.pool.query<RepositoryRecord>(
       'SELECT * FROM repositories WHERE organization_id = $1 AND id = $2',
       [organizationId, repositoryId],
@@ -70,6 +81,7 @@ export class RepositoryRepository {
   }
 
   async listByOrganization(organizationId: string): Promise<RepositoryRecord[]> {
+    assertOrganizationContext(organizationId);
     const result = await this.pool.query<RepositoryRecord>(
       'SELECT * FROM repositories WHERE organization_id = $1 ORDER BY created_at DESC',
       [organizationId],
@@ -79,6 +91,7 @@ export class RepositoryRepository {
   }
 
   async getByExternalId(organizationId: string, provider: 'GITHUB' | 'LOCAL', externalId: string): Promise<RepositoryRecord | null> {
+    assertOrganizationContext(organizationId);
     const result = await this.pool.query<RepositoryRecord>(
       'SELECT * FROM repositories WHERE organization_id = $1 AND provider = $2 AND external_id = $3',
       [organizationId, provider, externalId],
@@ -87,6 +100,7 @@ export class RepositoryRepository {
   }
 
   async create(input: CreateRepositoryInput): Promise<RepositoryRecord> {
+    assertOrganizationContext(input.organizationId);
     const result = await this.pool.query<RepositoryRecord>(
       `INSERT INTO repositories (organization_id, provider, external_id, full_name, default_branch, clone_url)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -98,6 +112,7 @@ export class RepositoryRepository {
   }
 
   async createOrUpdate(input: CreateRepositoryInput): Promise<RepositoryRecord> {
+    assertOrganizationContext(input.organizationId);
     const result = await this.pool.query<RepositoryRecord>(
       `INSERT INTO repositories (organization_id, provider, external_id, full_name, default_branch, clone_url)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -113,6 +128,7 @@ export class RepositoryRepository {
   }
 
   async createWithCommit(input: CreateRepositoryWithCommitInput): Promise<RepositoryWithCommit> {
+    assertOrganizationContext(input.organizationId);
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -160,6 +176,7 @@ export class RepositoryRepository {
   }
 
   async createWithCommitAndFiles(input: CreateRepositoryWithCommitAndFilesInput): Promise<RepositoryWithCommit> {
+      assertOrganizationContext(input.organizationId);
       const client = await this.pool.connect();
       try {
         await client.query('BEGIN');

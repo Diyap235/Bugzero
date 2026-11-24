@@ -1,0 +1,35 @@
+{
+  "name": "@bugzero/workers",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./analysis-queue": "./src/jobs/analysis-queue.ts",
+    "./ai/nvidia": "./src/ai/nvidia/nvidia-client.ts",
+    "./github-provider": "./src/providers/github-provider.ts",
+    "./analysis-processor": "./src/jobs/process-analysis-job.ts",
+    "./ml-signals": "./src/ml/ml-signal-adapter.ts",
+    "./local-worker": "./src/local-worker.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/**/*.test.ts",
+    "start": "node --env-file-if-exists=../.env.local --import tsx src/worker.ts"
+  },
+  "dependencies": {
+    "@bugzero/config": "workspace:*",
+    "@bugzero/contracts": "workspace:*",
+    "@bugzero/database": "workspace:*",
+    "pg": "^8.13.0",
+    "typescript": "^5",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/pg": "^8.11.5",
+    "eslint": "^8",
+    "tsx": "^4.20.3"
+  }
+}

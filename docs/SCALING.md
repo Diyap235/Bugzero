@@ -12,7 +12,7 @@ The architecture intentionally avoids a full-analysis-everything model. It empha
 - change-focused and impacted-code analysis
 - progressive repository analysis
 - PostgreSQL indexes for repository intelligence queries
-- Redis/BullMQ for asynchronous job execution
+- PostgreSQL-backed job claiming with `FOR UPDATE SKIP LOCKED`, persisted leases, and bounded retries
 - object storage for large artifacts
 
 This is the core of the scaling design in `docs/SYSTEM_DESIGN.md` and the ADRs.

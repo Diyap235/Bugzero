@@ -2,42 +2,28 @@
   "name": "bugzero",
   "version": "1.0.0",
   "description": "AI-Powered Repository Review Platform",
+  "packageManager": "pnpm@9.12.0",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build && pnpm --filter @bugzero/api --filter @bugzero/workers --filter @bugzero/database --filter @bugzero/contracts --filter @bugzero/config build",
-    "start": "next start",
-    "lint": "next lint && pnpm --filter @bugzero/api --filter @bugzero/workers --filter @bugzero/database --filter @bugzero/config lint",
-    "test": "node --import tsx --test \"apps/workers/tests/**/*.test.ts\" \"apps/workers/tests/*.test.ts\" \"apps/api/tests/**/*.test.ts\" \"apps/web/tests/*.test.ts\" \"packages/database/tests/**/*.test.ts\"",
-    "typecheck": "tsc --noEmit && pnpm --filter @bugzero/api --filter @bugzero/workers --filter @bugzero/database --filter @bugzero/contracts --filter @bugzero/config typecheck"
+    "dev": "pnpm --dir frontend dev",
+    "build": "pnpm --dir frontend build && pnpm --dir backend build && pnpm --dir worker build && pnpm --filter @bugzero/database --filter @bugzero/contracts --filter @bugzero/config build",
+    "start": "pnpm --dir frontend start",
+    "lint": "pnpm --dir frontend lint && pnpm --dir backend lint && pnpm --dir worker lint && pnpm --filter @bugzero/database --filter @bugzero/config lint",
+    "test": "node --import tsx --test \"worker/tests/**/*.test.ts\" \"worker/tests/*.test.ts\" \"backend/tests/**/*.test.ts\" \"frontend/tests/*.test.ts\" \"shared/database/tests/**/*.test.ts\"",
+    "typecheck": "pnpm --dir frontend typecheck && pnpm --dir backend typecheck && pnpm --dir worker typecheck && pnpm --filter @bugzero/database --filter @bugzero/contracts --filter @bugzero/config typecheck"
   },
   "workspaces": [
-    "apps/*",
-    "packages/*"
+    "frontend",
+    "backend",
+    "worker",
+    "shared/*"
   ],
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@bugzero/contracts": "workspace:^",
-    "clsx": "^2.1.1",
-    "framer-motion": "11.3.31",
-    "lucide-react": "^0.445.0",
-    "next": "15.0.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "tailwind-merge": "^2.5.2",
-    "zod": "^3.23.8"
+    "@neon/config": "^1.8.6"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "autoprefixer": "^10.4.20",
-    "eslint": "^8",
-    "eslint-config-next": "15.0.0",
-    "postcss": "^8.4.47",
-    "tailwindcss": "^3.4.13",
-    "tsx": "^4.20.3",
-    "typescript": "^5"
+    "tsx": "^4.20.3"
   }
 }
