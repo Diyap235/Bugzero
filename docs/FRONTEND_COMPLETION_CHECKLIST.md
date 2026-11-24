@@ -27,7 +27,6 @@
 - [ ] No new analyzers during this frontend sprint.
 - [ ] No new database architecture during this frontend sprint.
 - [ ] No Kafka.
-- [ ] No Neo4j.
 - [ ] No Kubernetes.
 - [ ] No microservice expansion.
 - [ ] No unnecessary dependencies.
@@ -77,14 +76,14 @@ Before making major changes, inspect the existing frontend.
 
 Inspect:
 
-- [ ] `src/app`
-- [ ] `src/components`
-- [ ] `src/domains`
-- [ ] `src/hooks`
-- [ ] `src/lib`
-- [ ] `src/lib/auth`
-- [ ] `src/domains/product/sample-data.ts`
-- [ ] `src/domains/product/types.ts`
+- [ ] `frontend/src/app`
+- [ ] `frontend/src/components`
+- [ ] `frontend/src/domains`
+- [ ] `frontend/src/hooks`
+- [ ] `frontend/src/lib`
+- [ ] `frontend/src/lib/auth`
+- [ ] `frontend/src/domains/product/sample-data.ts`
+- [ ] `frontend/src/domains/product/types.ts`
 - [ ] Existing layout
 - [ ] Existing sidebar
 - [ ] Existing topbar
@@ -205,7 +204,7 @@ Use the existing centralized sample data.
 
 Primary source:
 
-`src/domains/product/sample-data.ts`
+`frontend/src/domains/product/sample-data.ts`
 
 Verify:
 

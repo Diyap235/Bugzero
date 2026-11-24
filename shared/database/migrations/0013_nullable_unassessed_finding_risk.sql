@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE findings
+    ALTER COLUMN current_risk DROP NOT NULL;
+
+COMMIT;

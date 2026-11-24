@@ -130,8 +130,8 @@ export class HealthRepository {
         dimensions, profile_snapshot, calculation, explanation
       )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-       ON CONFLICT (organization_id, repository_id, commit_id, profile_id, profile_version)
-         WHERE profile_id IS NOT NULL
+       ON CONFLICT (organization_id, repository_id, commit_id, analysis_run_id, profile_id, profile_version)
+         WHERE profile_id IS NOT NULL AND analysis_run_id IS NOT NULL
        DO NOTHING
        RETURNING *`,
       values,
@@ -142,8 +142,8 @@ export class HealthRepository {
       `SELECT *
        FROM health_snapshots
        WHERE organization_id = $1 AND repository_id = $2 AND commit_id = $3
-         AND profile_id = $4 AND profile_version = $5`,
-      [input.organizationId, input.repositoryId, input.commitId, input.profileId, input.profileVersion],
+         AND analysis_run_id = $4 AND profile_id = $5 AND profile_version = $6`,
+      [input.organizationId, input.repositoryId, input.commitId, input.analysisRunId, input.profileId, input.profileVersion],
     );
     if (!existing.rows[0]) throw new Error('Health snapshot identity conflict occurred but the existing snapshot could not be loaded');
     return { record: normalizeRecord(existing.rows[0]), created: false };
@@ -189,6 +189,19 @@ export class HealthRepository {
        ORDER BY created_at DESC
        LIMIT 1`,
       [organizationId, repositoryId],
+    );
+
+    return result.rows[0] ? normalizeRecord(result.rows[0]) : null;
+  }
+
+  async getForRun(organizationId: string, repositoryId: string, analysisRunId: string): Promise<HealthSnapshot | null> {
+    const result = await this.pool.query<HealthSnapshot>(
+      `SELECT *
+       FROM health_snapshots
+       WHERE organization_id = $1 AND repository_id = $2 AND analysis_run_id = $3
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [organizationId, repositoryId, analysisRunId],
     );
 
     return result.rows[0] ? normalizeRecord(result.rows[0]) : null;

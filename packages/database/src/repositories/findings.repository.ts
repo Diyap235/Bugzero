@@ -19,7 +19,7 @@ export interface Finding {
   resolution_evidence_id: string | null;
   current_severity: FindingSeverity;
   current_confidence: FindingConfidence;
-  current_risk: number;
+  current_risk: number | string | null;
   last_seen_commit_id: string | null;
   business_priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | null;
   accepted_risk: boolean;
@@ -64,7 +64,7 @@ export interface CreateFindingInput {
   lifecycle?: FindingLifecycle;
   currentSeverity: FindingSeverity;
   currentConfidence: FindingConfidence;
-  currentRisk: number;
+  currentRisk: number | null;
   lastSeenCommitId?: string | null;
   businessPriority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | null;
 }
@@ -203,16 +203,14 @@ export class FindingRepository {
       `UPDATE findings
        SET current_severity = $2,
            current_confidence = $3,
-           current_risk = $4,
-           last_seen_commit_id = $5,
+           last_seen_commit_id = $4,
            updated_at = now()
-       WHERE organization_id = $1 AND id = $6
+       WHERE organization_id = $1 AND id = $5
        RETURNING *`,
       [
         input.organizationId,
         input.currentSeverity,
         input.currentConfidence,
-        input.currentRisk,
         input.lastSeenCommitId ?? null,
         existing.rows[0].id,
       ],
@@ -324,7 +322,7 @@ export class FindingRepository {
          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
          $13, $14, $15, $16, $17, $18, $19, $20, $21
        )
-       ON CONFLICT DO NOTHING
+       ON CONFLICT (organization_id, finding_id, analysis_run_id) DO NOTHING
        RETURNING *`,
       [
         input.organizationId,
@@ -357,29 +355,15 @@ export class FindingRepository {
 
     const existing = await this.pool.query<FindingOccurrence>(
       `SELECT * FROM finding_occurrences
-       WHERE organization_id = $1
-         AND finding_id = $2
-         AND commit_id = $3
-         AND normalized_fingerprint = $4
-       ORDER BY created_at ASC
-       LIMIT 1`,
-      [input.organizationId, input.findingId, input.commitId, input.normalizedFingerprint],
-    );
-    if (existing.rows[0]) {
-      return { record: existing.rows[0], created: false };
-    }
-
-    const sameRun = await this.pool.query<FindingOccurrence>(
-      `SELECT * FROM finding_occurrences
        WHERE organization_id = $1 AND finding_id = $2 AND analysis_run_id = $3
        LIMIT 1`,
       [input.organizationId, input.findingId, input.analysisRunId],
     );
-    if (!sameRun.rows[0]) {
+    if (!existing.rows[0]) {
       throw new Error('Occurrence uniqueness conflict occurred but the existing occurrence could not be loaded');
     }
 
-    return { record: sameRun.rows[0], created: false };
+    return { record: existing.rows[0], created: false };
   }
 
   async getOccurrencesForFinding(organizationId: string, findingId: string): Promise<FindingOccurrence[]> {

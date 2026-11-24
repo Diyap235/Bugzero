@@ -85,7 +85,7 @@ The current architecture explicitly excludes:
 - autonomous code fixing
 - fully autonomous security decisions
 - broad multi-language expansion in the first slice
-- a graph database-first requirement
+- mandatory graph-database-first product persistence (the code graph is separately required by ADR-016)
 - arbitrary dynamic execution of repository code
 - production-scale 1M+ LOC validation claims without benchmarks
 

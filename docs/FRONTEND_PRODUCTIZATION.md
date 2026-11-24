@@ -2,8 +2,8 @@
 
 ## Product experience
 
-The active Next.js App Router application is the repository-root `src/app`
-tree. New users create an account and workspace at `/signup`, receive an
+The active Next.js App Router application is in `frontend/src/app`. New users
+create an account and workspace at `/signup`, receive an
 Ed25519-signed session, and enter the real `/repositories` workspace. Returning
 users authenticate against their persisted account at `/login`.
 

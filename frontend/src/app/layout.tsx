@@ -1,0 +1,25 @@
+import type { Metadata } from "next";
+import { AuthProvider } from "@/lib/auth/auth-context";
+import { WorkspaceShell } from "@/components/layout/WorkspaceShell";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "BugZero — Repository Intelligence",
+  description: "Understand your repository, investigate findings, and track code health.",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en" className="dark">
+      <body className="bg-background text-text-primary antialiased selection:bg-primary selection:text-white">
+        <AuthProvider>
+          <WorkspaceShell>{children}</WorkspaceShell>
+        </AuthProvider>
+      </body>
+    </html>
+  );
+}

@@ -21,4 +21,4 @@ Migration `0003_finding_occurrence_idempotency.sql` adds a unique index on `(org
 
 ## Validation boundary
 
-Worker tests exercise Finding → FindingOccurrence → Evidence Snapshot → Nodes/Edges/Paths → Risk Assessment → Repository Health with injected in-memory repositories and verify migration definitions. No live PostgreSQL instance was available, so migration application and actual constraint behavior have not been claimed as live-validated. See [EVIDENCE.md](EVIDENCE.md), [RISK.md](RISK.md), and [HEALTH.md](HEALTH.md).
+Worker tests exercise Finding → FindingOccurrence → Evidence Snapshot → Nodes/Edges/Paths → Risk Assessment → Repository Health with injected repositories and verify migration definitions. The Neon development endpoint is reachable, but its BugZero migration history and queue table are absent and it has no dedicated `bugzero_queue_worker` role; migration application and live constraint behavior therefore remain unvalidated. See [EVIDENCE.md](EVIDENCE.md), [RISK.md](RISK.md), and [HEALTH.md](HEALTH.md).

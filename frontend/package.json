@@ -1,0 +1,35 @@
+{
+  "name": "@bugzero/web",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "node scripts/run-next.mjs dev --port 3000",
+    "build": "node scripts/run-next.mjs build",
+    "start": "node scripts/run-next.mjs start",
+    "lint": "node scripts/run-next.mjs lint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"tests/*.test.ts\""
+  },
+  "dependencies": {
+    "@bugzero/contracts": "workspace:^",
+    "clsx": "^2.1.1",
+    "framer-motion": "11.3.31",
+    "lucide-react": "^0.445.0",
+    "next": "15.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8",
+    "eslint-config-next": "15.0.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "tsx": "^4.20.3",
+    "typescript": "^5"
+  }
+}

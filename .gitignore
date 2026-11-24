@@ -32,3 +32,6 @@ build/
 
 # coverage
 coverage/
+.neon
+
+oracleJdk-27/

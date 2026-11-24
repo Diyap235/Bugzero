@@ -8,7 +8,7 @@
 Analysis is asynchronous and multi-stage; without correlation it is difficult to diagnose latency, partial failure, or resource pressure.
 
 ## Decision
-Track repository/revision/analysis/job identifiers across stages. Required measurements include queue latency/depth, analysis duration, analyzer failures, parser failures, coverage/completeness, finding counts, CPU/memory, AI latency/cost, database/Redis latency, retries, and resource-limit failures.
+Track repository/revision/analysis/job identifiers across stages. Required measurements include PostgreSQL queue latency/depth, lease renewals/expiry, analysis duration, analyzer failures, parser failures, coverage/completeness, finding counts, CPU/memory, AI latency/cost, database latency, retries, and resource-limit failures.
 
 ## Consequences
 - Better debugging and benchmark visibility.

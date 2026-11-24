@@ -2,10 +2,35 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient, QueryConfig } from 'pg';
 
 const organizationContext = new AsyncLocalStorage<string>();
+const analysisJobLeaseContext = new AsyncLocalStorage<{
+  organizationId: string;
+  jobId: string;
+  leaseOwner: string;
+}>();
 const organizationIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function getOrganizationContext(): string | undefined {
   return organizationContext.getStore();
+}
+
+export function withAnalysisJobLeaseContext<T>(
+  organizationId: string,
+  jobId: string,
+  leaseOwner: string,
+  operation: () => Promise<T>,
+): Promise<T> {
+  if (![organizationId, jobId, leaseOwner].every((value) => organizationIdPattern.test(value))) {
+    throw new Error('Valid organization, analysis job, and lease owner IDs are required');
+  }
+  return analysisJobLeaseContext.run({ organizationId, jobId, leaseOwner }, operation);
+}
+
+export function getAnalysisJobLeaseContext(): {
+  organizationId: string;
+  jobId: string;
+  leaseOwner: string;
+} | undefined {
+  return analysisJobLeaseContext.getStore();
 }
 
 export function withOrganizationContext<T>(organizationId: string, operation: () => Promise<T>): Promise<T> {
@@ -30,6 +55,10 @@ function bindTenantScopedPoolQueries(pool: Pool): void {
     value: (...args: unknown[]) => {
       const organizationId = getOrganizationContext();
       if (!organizationId) return originalQuery(...args as Parameters<Pool['query']>);
+      const lease = getAnalysisJobLeaseContext();
+      if (lease && lease.organizationId !== organizationId) {
+        throw new Error('Analysis job lease context does not match the active organization context');
+      }
 
       let callback: ((error: unknown, result?: unknown) => void) | undefined;
       for (let index = args.length - 1; index >= 0; index -= 1) {
@@ -46,6 +75,10 @@ function bindTenantScopedPoolQueries(pool: Pool): void {
         try {
           await client.query('BEGIN');
           await client.query("SELECT set_config('app.organization_id', $1, true)", [organizationId]);
+          if (lease) {
+            await client.query("SELECT set_config('app.analysis_job_id', $1, true)", [lease.jobId]);
+            await client.query("SELECT set_config('app.analysis_lease_owner', $1, true)", [lease.leaseOwner]);
+          }
           const result = typeof queryArgument === 'string'
             ? await client.query<Record<string, unknown>>(queryArgument, values as unknown[] | undefined)
             : await client.query<Record<string, unknown>>(queryArgument as QueryConfig<unknown[]>);

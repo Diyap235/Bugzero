@@ -1,109 +1,45 @@
-# BugZero Database Design
+# BugZero database design
 
-**Status:** Foundation  
-**Authority:** This document describes the PostgreSQL persistence model defined by `db/migrations/0001_bugzero_foundation.sql`. `docs/SYSTEM_DESIGN.md` remains the technical source of truth; this document does not supersede it.
+## Persistence boundary
 
-## 1. Persistence boundaries
+Neon PostgreSQL, accessed through the standard `pg` driver and `DATABASE_URL`, is the sole runtime database and durable job queue. The application rejects missing, malformed, or non-Neon database URLs instead of falling back to a local server. Use `DATABASE_URL_UNPOOLED` for the migration runner. The local Neon project link does not apply migrations; run the SQL migration runner only against an explicitly verified target.
 
-PostgreSQL is the canonical transactional store for product metadata and analysis state. This follows SYSTEM_DESIGN sections 38–41 and ADR-010.
+| Data | PostgreSQL source of truth |
+|---|---|
+| Users, organizations, memberships, repositories, commits, source snapshots | Existing tenant-scoped tables |
+| Analysis runs, jobs, profiles, coverage and history | `analysis_runs`, `analysis_jobs`, `analysis_profiles` |
+| Code representation and relationships | `code_entities`, `code_relationships` |
+| Direct dependencies and dependency links | `dependencies`, `dependency_edges` |
+| Source-to-sink links | `data_flow_edges` |
+| Findings, occurrences, evidence, risk, health and reports | Existing immutable and revisioned analysis tables |
+| Queue readiness, retries, attempts and leases | `analysis_jobs` |
 
-| Information | Canonical source |
-| --- | --- |
-| Source code | Git commit |
-| Repository metadata | PostgreSQL |
-| Code IR and relationships | Derived from source and rebuildable |
-| Evidence | Immutable, revisioned analysis result |
-| Findings | Finding system with immutable occurrences |
-| Health | Derived snapshot |
-| Search/index data | Rebuildable derived state |
-| Cache and queue state | Redis; never authoritative |
-| Large repository and analysis artifacts | Object storage |
-| AI explanation | Derived enrichment |
+The frontend and authentication/tenant model are unchanged. Tenant-owned records carry `organization_id`; forced row-level security and tenant-composite foreign keys remain in effect.
 
-The migration is SQL-first and uses PostgreSQL directly. No ORM or third-party migration framework is introduced. Migrations `0001` through `0007` are canonical and applied by the tracked `packages/database` runner. Clean-database execution and live constraint validation remain outstanding.
+## Durable analysis queue
 
-## 2. Entity relationships
+The API inserts the analysis run and queued job transactionally. That committed job row is the enqueue operation; there is no external broker whose outage can leave the API returning a success-shaped response without durable work.
 
-```text
-organizations ── members ── users
-      │
-      └── repositories ── repository_commits ── repository_files
-                 │                 │
-                 │                 ├── analysis_runs ── analysis_jobs
-                 │                 ├── code_entities ── code_relationships
-                 │                 ├── dependencies ── dependency_edges
-                 │                 ├── findings ── finding_occurrences ── evidence
-                 │                 │                                  ├── evidence_nodes
-                 │                 │                                  └── evidence_edges
-                 │                 ├── health_snapshots
-                 │                 ├── reports
-                 │                 └── ai_explanations
-                 └── audit_logs
-```
+Workers select eligible jobs in a transaction using `FOR UPDATE SKIP LOCKED`, increment attempts, and set a lease owner and expiry. They renew leases while processing. Updates to job status/stage are fenced by the active lease owner. Failed jobs are retried with bounded exponential backoff up to the persisted `max_attempts`; expired leases are reclaimed or dead-lettered. A worker failure to persist retry/dead-letter state is surfaced rather than silently acknowledged.
 
-Every tenant-owned table has `organization_id`. Composite foreign keys include the tenant identifier so a row cannot reference a parent belonging to another organization. `users` are global identity records; organization membership and authorization are represented by tenant-scoped `members`.
+Queue discovery spans tenants through a worker-only `analysis_jobs` RLS policy. Job processing and all other tenant-owned reads/writes execute under the claimed organization context. The queue worker policy is not used for other tenant tables.
 
-## 3. Revision and finding identity
+## Run-scoped code intelligence
 
-Repository commits are unique by organization, repository, and Git commit SHA. Repository files, Code IR, relationships, analysis runs, and dependency snapshots reference a specific commit.
+`code_entities` stores parsed files, symbols, functions, and dependency entities. `code_relationships` stores code relationships such as imports, declarations, calls, and dependency links. Direct source-to-sink paths with validated complete evidence are stored in `data_flow_edges`. `dependencies` stores normalized package declarations; `dependency_edges` remains available for package-to-package links. Repository intelligence queries filter by organization, repository, commit, and analysis run.
 
-A `findings` row represents an underlying issue. Its identity uses the rule and a versioned semantic `identity_fingerprint`; it is explicitly not keyed by file path or line number. `finding_occurrences` record immutable observations at a particular commit and analysis run, including historical location, fingerprint, assessment, and observation state.
+The forward-only migration `0014_postgres_queue_and_code_graph.sql` adds queue lease/retry columns and indexes, adds nullable `analysis_run_id` columns to historical code/dependency records, establishes run-scoped uniqueness and foreign keys, and creates the RLS-protected data-flow table. Existing records are retained with a null run association. New worker writes always include a run ID. Deterministic IDs and upserts make snapshot replay idempotent. Graph/database failures fail analysis; there is no fallback that masks a persistence outage.
 
-`observation` is separate from finding `lifecycle`. `NOT_DETECTED` does not mean `RESOLVED`. A resolved finding must reference evidence whose occurrence is `NOT_DETECTED`, whose analysis run completed, and whose evidence is authoritative, complete, and sufficient. The migration enforces this resolution precondition.
+## Findings and evidence
 
-## 4. Evidence and enrichment
+Findings represent semantic issues; immutable occurrences record a specific observation at a commit and run. Evidence snapshots retain authority, completeness, sufficiency, analyzer versions, paths, diagnostics, and an idempotency fingerprint. Evidence nodes and edges belong to one snapshot. Incomplete evidence cannot claim sufficiency, and a resolved finding requires authoritative, complete evidence for a completed `NOT_DETECTED` occurrence.
 
-Each `evidence` row is an immutable version tied to an organization, repository, commit, analysis run, finding, and occurrence. Evidence records its `origin`, `authority` (`AUTHORITATIVE` or `INVESTIGATIVE`), sufficiency, completeness, analyzer versions, graph paths, diagnostics, and an idempotency fingerprint. Migration `0005_versioned_evidence_graph.sql` adds these explicit snapshot identity/completeness fields and evidence node source ranges; the database uniqueness key prevents duplicate snapshots per occurrence and identity. Database checks require AI- and heuristic-origin evidence to remain investigative; authoritative evidence must come from deterministic analysis or human validation. Incomplete evidence cannot claim `SUFFICIENT`.
+Deterministic analysis is authoritative. ML is investigative and AI is advisory; neither can promote findings/evidence or change risk/health. Unsupported parsers and unlinked or incomplete evidence remain visible as partial coverage.
 
-Evidence nodes and edges belong to a specific evidence version. The edge foreign keys prevent links to nodes from another evidence graph. Historical evidence, nodes, edges, and occurrences reject updates and deletes; improved analysis creates new records. Evidence paths are ordered JSON on the snapshot, while nodes/edges remain separately queryable. The worker writes a snapshot and its graph atomically using the evidence repository.
+## Risk and health
 
-AI explanation rows are derived and immutable. They do not carry authority to promote investigative evidence into authoritative evidence. AI output remains associated with its source occurrence and, when applicable, an evidence version.
+Risk assessments are deterministic and versioned. Health snapshots are deterministically derived from persisted analysis state. The formula specifications live in [RISK.md](./RISK.md) and [HEALTH.md](./HEALTH.md); API results are read from persisted PostgreSQL records.
 
-## 5. Analysis, IR, dependencies, health, and reports
+## Migrations and data preservation
 
-- `analysis_profiles` version the configuration used by a run.
-- `analysis_runs` bind profile, scope, repository, and commit.
-- `analysis_jobs` hold retryable/idempotent asynchronous stage work.
-- `code_entities` and `code_relationships` are commit-scoped derived IR; they can be rebuilt.
-- `dependencies` and `dependency_edges` are commit-scoped dependency snapshots.
-- `health_snapshots` preserve derived health at a commit.
-- `reports` reference the analysis run they represent; artifact bytes may live in object storage.
-- `audit_logs` preserve organization-scoped actor and state-change records.
-
-## 6. Repository intelligence and query performance
-
-Repository intelligence is derived state built from the persisted Code IR and dependency snapshots. It is intentionally not authoritative over the underlying Git source tree. Intelligence is scoped to `organization_id`, `repository_id`, and `commit_id`, and every query must apply the same commit-scoped filters so a later commit cannot leak earlier relationships.
-
-The repository intelligence queries use the existing Postgres repository abstractions and are optimized for the patterns below:
-
-```text
-repository + commit + entity_id
-repository + commit + qualified_name
-repository + commit + file_path
-repository + commit + entity_type
-repository + commit + source_entity_id
-repository + commit + target_entity_id
-repository + commit + relation
-repository + commit + package_name
-```
-
-Additional forward indexes are deliberately added in `db/migrations/0002_repository_intelligence_indexes.sql` to avoid full scans when building call graphs, import graphs, dependency chains, and impact traversals. They are additive and do not rewrite historical migration state. Migrations `0003`–`0007` add occurrence, relationship, evidence, risk, and health idempotency/versioning constraints.
-
-## 7. Tenant isolation and application use
-
-Row Level Security is enabled and forced for tenant-owned tables. Each connection transaction must set the authorized tenant before querying:
-
-```sql
-BEGIN;
-SET LOCAL app.organization_id = '00000000-0000-0000-0000-000000000000';
--- tenant-scoped statements
-COMMIT;
-```
-
-The application must derive this value from authenticated membership, never from an untrusted request field alone. Queries must continue to include organization scope and perform authorization checks; RLS is a database backstop, not a replacement for application authorization. The current repository adapters do not yet establish `app.organization_id`, so live tenant-owned operations are not ready for deployment. The shared `users` identity table is intentionally not tenant-scoped; access to it must be limited to authenticated identity operations.
-
-The application database role must not own the tables or have `BYPASSRLS`. Migration/administration credentials must be kept separate from runtime credentials. A missing tenant setting yields no matching tenant rows.
-
-## 7. Migration ownership
-
-`db/migrations/` is the canonical SQL migration location. Apply `0001` through `0007` in numeric order with `pnpm --filter @bugzero/database migrate`; later migrations extend the existing evidence/risk/health persistence model and do not rewrite older migration history. `packages/database/` is the TypeScript package for persistence adapters and database-facing types; it must not contain a second nested database directory or duplicate migration history. No database queries or persistence behavior belong in shared contracts or the Python analysis engine.
+Migration files are append-only and checksummed. Never rewrite applied migrations or reset production databases. Validate migrations on a disposable Neon branch before production review. Existing historical migration files and database records are preserved.

@@ -1,0 +1,344 @@
+{
+  "dataset_name": "BugZero 50-File Audit & ML Evaluation Fixture",
+  "version": "1.0",
+  "case_count": 48,
+  "purpose": "Evaluation and debugging fixture; not a trained model or guaranteed score generator.",
+  "cases": [
+    {
+      "name": "case_001_python_sqli_concat.py",
+      "language": "python",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_SQLI",
+      "notes": "Primary positive control for supported SQL-injection analysis."
+    },
+    {
+      "name": "case_002_python_sqli_fstring.py",
+      "language": "python",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_SQLI",
+      "notes": "F-string detection depends on the current analyzer's supported patterns."
+    },
+    {
+      "name": "case_003_python_sqli_safe.py",
+      "language": "python",
+      "category": "sql_injection",
+      "expected_behavior": "SAFE_SQL",
+      "notes": "Negative control: parameterized query."
+    },
+    {
+      "name": "case_004_python_sqli_constant.py",
+      "language": "python",
+      "category": "sql_injection",
+      "expected_behavior": "SAFE_SQL",
+      "notes": "Negative control: constant SQL."
+    },
+    {
+      "name": "case_005_python_command_injection.py",
+      "language": "python",
+      "category": "command_injection",
+      "expected_behavior": "UNSUPPORTED_OR_DEFERRED",
+      "notes": "Command-injection example; expected unsupported unless this analyzer is implemented."
+    },
+    {
+      "name": "case_006_python_path_traversal.py",
+      "language": "python",
+      "category": "path_traversal",
+      "expected_behavior": "UNSUPPORTED_OR_DEFERRED",
+      "notes": "Path traversal example; expected unsupported unless implemented."
+    },
+    {
+      "name": "case_007_python_fake_secret.py",
+      "language": "python",
+      "category": "hardcoded_secret",
+      "expected_behavior": "UNSUPPORTED_OR_DEFERRED",
+      "notes": "Fake token for pattern tests; no real secret."
+    },
+    {
+      "name": "case_008_python_complex_branches.py",
+      "language": "python",
+      "category": "structural_quality",
+      "expected_behavior": "QUALITY_REVIEW",
+      "notes": "Complexity/maintainability test; exact score depends on configured rules."
+    },
+    {
+      "name": "case_009_python_repetition.py",
+      "language": "python",
+      "category": "structural_quality",
+      "expected_behavior": "QUALITY_REVIEW",
+      "notes": "Repetitive functions for structural-quality evaluation."
+    },
+    {
+      "name": "case_010_python_syntax_error.py",
+      "language": "python",
+      "category": "parser_resilience",
+      "expected_behavior": "PARSE_ERROR_EXPECTED",
+      "notes": "Intentionally invalid Python syntax; parser should report incomplete/failed parsing, not fabricate findings."
+    },
+    {
+      "name": "case_011_python_no_vuln.py",
+      "language": "python",
+      "category": "baseline",
+      "expected_behavior": "NO_SECURITY_FINDING_EXPECTED",
+      "notes": "Simple safe baseline."
+    },
+    {
+      "name": "case_012_python_sqli_execute_variable.py",
+      "language": "python",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_SQLI",
+      "notes": "SQL concatenation passed to execute; test whether dataflow is recognized."
+    },
+    {
+      "name": "case_013_python_sqli_multiline.py",
+      "language": "python",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_SQLI",
+      "notes": "Multiline concatenation variant."
+    },
+    {
+      "name": "case_014_python_safe_validation.py",
+      "language": "python",
+      "category": "baseline",
+      "expected_behavior": "SAFE_OR_REVIEW",
+      "notes": "Safe validation baseline."
+    },
+    {
+      "name": "case_015_python_broken_runtime.py",
+      "language": "python",
+      "category": "runtime_error",
+      "expected_behavior": "RUNTIME_ERROR_EXPECTED",
+      "notes": "Runtime correctness issue; should not be misclassified as SQL injection."
+    },
+    {
+      "name": "case_016_python_incomplete_taint.py",
+      "language": "python",
+      "category": "sql_injection",
+      "expected_behavior": "INVESTIGATE_TAINT_LIMIT",
+      "notes": "Tests the difference between risky construction and an actual database sink."
+    },
+    {
+      "name": "case_017_ts_sqli_concat.ts",
+      "language": "typescript",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_SQLI",
+      "notes": "Primary TypeScript SQL-injection positive control."
+    },
+    {
+      "name": "case_018_ts_sqli_safe.ts",
+      "language": "typescript",
+      "category": "sql_injection",
+      "expected_behavior": "SAFE_SQL",
+      "notes": "Parameterized SQL negative control."
+    },
+    {
+      "name": "case_019_ts_sqli_template.ts",
+      "language": "typescript",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_OR_RULE_LIMIT",
+      "notes": "Template literal variant; verifies rule coverage."
+    },
+    {
+      "name": "case_020_ts_command_injection.ts",
+      "language": "typescript",
+      "category": "command_injection",
+      "expected_behavior": "UNSUPPORTED_OR_DEFERRED",
+      "notes": "Command-injection pattern; not guaranteed to be implemented."
+    },
+    {
+      "name": "case_021_ts_path_traversal.ts",
+      "language": "typescript",
+      "category": "path_traversal",
+      "expected_behavior": "UNSUPPORTED_OR_DEFERRED",
+      "notes": "Path traversal pattern; not guaranteed to be implemented."
+    },
+    {
+      "name": "case_022_ts_fake_secret.ts",
+      "language": "typescript",
+      "category": "hardcoded_secret",
+      "expected_behavior": "UNSUPPORTED_OR_DEFERRED",
+      "notes": "Fake marker only."
+    },
+    {
+      "name": "case_023_ts_complexity.ts",
+      "language": "typescript",
+      "category": "structural_quality",
+      "expected_behavior": "QUALITY_REVIEW",
+      "notes": "Branch-heavy example. Includes a deliberately awkward expression to test review; not production code."
+    },
+    {
+      "name": "case_024_ts_syntax_error.ts",
+      "language": "typescript",
+      "category": "parser_resilience",
+      "expected_behavior": "PARSE_ERROR_EXPECTED",
+      "notes": "Intentionally invalid TypeScript."
+    },
+    {
+      "name": "case_025_ts_safe_baseline.ts",
+      "language": "typescript",
+      "category": "baseline",
+      "expected_behavior": "NO_SECURITY_FINDING_EXPECTED",
+      "notes": "Safe baseline."
+    },
+    {
+      "name": "case_026_ts_sqli_concat_variable.ts",
+      "language": "typescript",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_OR_RULE_LIMIT",
+      "notes": "SQL concatenation variable flow."
+    },
+    {
+      "name": "case_027_ts_no_sink.ts",
+      "language": "typescript",
+      "category": "sql_injection",
+      "expected_behavior": "INVESTIGATE_TAINT_LIMIT",
+      "notes": "SQL-like string without a database sink."
+    },
+    {
+      "name": "case_028_ts_repetition.ts",
+      "language": "typescript",
+      "category": "structural_quality",
+      "expected_behavior": "QUALITY_REVIEW",
+      "notes": "Repeated function bodies."
+    },
+    {
+      "name": "case_029_ts_runtime_bug.ts",
+      "language": "typescript",
+      "category": "correctness",
+      "expected_behavior": "RUNTIME_OR_STATIC_REVIEW",
+      "notes": "Correctness edge case, not automatically a security vulnerability."
+    },
+    {
+      "name": "case_030_ts_safe_parameter.ts",
+      "language": "typescript",
+      "category": "baseline",
+      "expected_behavior": "SAFE_OR_REVIEW",
+      "notes": "Safe numeric validation baseline."
+    },
+    {
+      "name": "case_031_ts_sqli_double_concat.ts",
+      "language": "typescript",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_OR_RULE_LIMIT",
+      "notes": "Multiple untrusted concatenation sources."
+    },
+    {
+      "name": "case_032_ts_incomplete.ts",
+      "language": "typescript",
+      "category": "parser_resilience",
+      "expected_behavior": "PARSE_ERROR_EXPECTED",
+      "notes": "Intentionally incomplete TypeScript."
+    },
+    {
+      "name": "case_033_js_sqli.js",
+      "language": "javascript",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_OR_RULE_LIMIT",
+      "notes": "JavaScript SQL injection; analyzer support depends on parser and source adapter."
+    },
+    {
+      "name": "case_034_js_safe.js",
+      "language": "javascript",
+      "category": "baseline",
+      "expected_behavior": "SAFE_OR_REVIEW",
+      "notes": "Safe JavaScript baseline."
+    },
+    {
+      "name": "case_035_js_command_injection.js",
+      "language": "javascript",
+      "category": "command_injection",
+      "expected_behavior": "UNSUPPORTED_OR_DEFERRED",
+      "notes": "Command injection pattern."
+    },
+    {
+      "name": "case_036_js_syntax_error.js",
+      "language": "javascript",
+      "category": "parser_resilience",
+      "expected_behavior": "PARSE_ERROR_EXPECTED",
+      "notes": "Intentionally invalid JavaScript."
+    },
+    {
+      "name": "case_037_java_sqli.java",
+      "language": "java",
+      "category": "sql_injection",
+      "expected_behavior": "UNSUPPORTED_OR_RULE_LIMIT",
+      "notes": "Java example; verify whether Java parsing and SQL rules are implemented."
+    },
+    {
+      "name": "case_038_java_safe.java",
+      "language": "java",
+      "category": "baseline",
+      "expected_behavior": "SAFE_OR_UNSUPPORTED",
+      "notes": "Safe Java comparison."
+    },
+    {
+      "name": "case_039_cpp_sqli.cpp",
+      "language": "cpp",
+      "category": "sql_injection",
+      "expected_behavior": "UNSUPPORTED_OR_RULE_LIMIT",
+      "notes": "C++ example; SQL analyzer support may not exist."
+    },
+    {
+      "name": "case_040_cpp_safe.cpp",
+      "language": "cpp",
+      "category": "baseline",
+      "expected_behavior": "SAFE_OR_UNSUPPORTED",
+      "notes": "Safe C++ comparison."
+    },
+    {
+      "name": "case_041_python_nested_sqli.py",
+      "language": "python",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_OR_RULE_LIMIT",
+      "notes": "Nested function and source propagation variation."
+    },
+    {
+      "name": "case_042_python_safe_allowlist.py",
+      "language": "python",
+      "category": "baseline",
+      "expected_behavior": "SAFE_OR_REVIEW",
+      "notes": "Allowlisted identifier; review whether analyzer can distinguish validated input."
+    },
+    {
+      "name": "case_043_python_sqli_comment.py",
+      "language": "python",
+      "category": "sql_injection",
+      "expected_behavior": "VULNERABLE_OR_RULE_LIMIT",
+      "notes": "Positive control with comment."
+    },
+    {
+      "name": "case_044_python_safe_constant_query.py",
+      "language": "python",
+      "category": "baseline",
+      "expected_behavior": "SAFE_SQL",
+      "notes": "Constant query negative control."
+    },
+    {
+      "name": "case_045_python_dead_code.py",
+      "language": "python",
+      "category": "correctness",
+      "expected_behavior": "REVIEW_DEAD_CODE",
+      "notes": "Dead code / correctness test."
+    },
+    {
+      "name": "case_046_python_broad_exception.py",
+      "language": "python",
+      "category": "quality",
+      "expected_behavior": "QUALITY_REVIEW",
+      "notes": "Broad exception quality example."
+    },
+    {
+      "name": "case_047_ts_dead_code.ts",
+      "language": "typescript",
+      "category": "correctness",
+      "expected_behavior": "REVIEW_DEAD_CODE",
+      "notes": "Dead code example."
+    },
+    {
+      "name": "case_048_ts_broad_cast.ts",
+      "language": "typescript",
+      "category": "correctness",
+      "expected_behavior": "REVIEW_TYPE_SAFETY",
+      "notes": "Unsafe type assertion; not necessarily a security finding."
+    }
+  ]
+}

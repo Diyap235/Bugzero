@@ -1,9 +1,7 @@
 # Frontend/backend integration
 
-The active Next.js application is the repository-root `src/app` tree. `apps/web`
-currently contains only a placeholder README, package metadata, and frontend
-tests; it is not the source tree used by the root `pnpm dev`, `pnpm build`, or
-`pnpm lint` scripts.
+The active Next.js application is in `frontend/src/app`. Its package owns the
+frontend build, development, lint, and test scripts.
 
 ## Authenticated data and endpoint mapping
 
@@ -16,7 +14,7 @@ tests; it is not the source tree used by the root `pnpm dev`, `pnpm build`, or
 | Finding sample rows | `GET /repositories/:repositoryId/findings` for each repository | `findings[]` containing finding and current occurrence | `/findings`, `/dashboard` |
 | Finding detail/evidence/risk samples | `GET /findings/:findingId` | Finding, selected occurrence, nullable persisted evidence graph, and risk assessments | `/findings/:id` |
 | Health history sample | `GET /repositories/:repositoryId/health` | `history[]` containing persisted snapshot and nullable commit SHA | `/health`, `/dashboard` |
-| Report placeholder | `GET /repositories/:repositoryId/reports` | Shared `ReportListResponse` with persisted report summaries | `/reports` |
+| Report history and content | `GET /repositories/:repositoryId/reports`, `POST /repositories/:repositoryId/reports`, `GET /reports/:reportId` | Persisted summaries and report content assembled from one stored analysis run | `/reports` |
 | Analysis status/progress | `POST /analysis`, then poll `GET /analysis/:runId` | Persisted job/run state and reported progress metrics | Repository detail and `/analysis/:id` |
 
 The authenticated workspace uses persisted API data only. API failures do not
@@ -52,12 +50,15 @@ returns the persisted workspace context.
 
 ZIP upload is the only repository-ingestion method exposed by the MVP. A
 successful upload is immediately submitted to the existing analysis API and
-BullMQ/Redis worker pipeline; no ZIP-specific analyzer or synthetic finding
+PostgreSQL-backed worker pipeline; no ZIP-specific analyzer or synthetic finding
 path exists.
 
-## Honest unsupported states
+## Honest report and analysis states
 
-The API currently lists persisted report summaries only. Report creation and
-download are not supported, so the Reports view does not offer fabricated
-exports or download actions. Unknown or missing health metrics remain unknown;
-they are not replaced with zero. API failures never fall back to preview data.
+Reports are generated from persisted run-specific findings, occurrences,
+evidence, and health snapshots. PDF, JSON, and findings CSV exports use the
+same document shown in the preview. Missing scores and finding descriptions
+remain Unknown; partial evidence and partial runs are labeled. Persisted AI
+investigations are displayed only as advisory investigative estimates and do
+not change deterministic finding authority. Unknown or missing health metrics
+are not replaced with zero. API failures never fall back to preview data.

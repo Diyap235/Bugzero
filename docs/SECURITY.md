@@ -17,13 +17,13 @@ Code IR + Repository Intelligence
   -> authoritative occurrence-linked evidence graph
 ```
 
-The analyzer, not AI, produces the finding. An optional post-analysis Groq investigator may provide an advisory explanation for an already-persisted finding; it cannot create findings or alter deterministic evidence, risk, or run status. No autonomous remediation or runtime/sandbox execution is implemented.
+The analyzer, not AI, produces authoritative findings. Optional post-analysis advisory review provides cited suggestions and estimated health scores; it cannot create authoritative findings or alter deterministic evidence, risk, or run status. No autonomous remediation or runtime/sandbox execution is implemented.
 
 ## Optional AI investigation
 
-The worker can be configured with server-side `GROQ_API_KEY` and `GROQ_MODEL`. No key is needed for deterministic analysis, and the key must not be exposed through a `NEXT_PUBLIC_*` variable. AI requests are limited to persisted finding/evidence context and nearby source snippets; the whole repository is never submitted. Context size, source excerpts, graph elements, paths, output tokens, timeout, and retries are bounded. Selected credential assignments, bearer tokens, private-key blocks, and sensitive file paths receive best-effort redaction/exclusion; this is not a general secret-scanning guarantee.
+The worker can be configured with server-side `NVIDIA_API_KEY` and `NVIDIA_MODEL`. No key is needed for deterministic analysis, and neither setting may use a `NEXT_PUBLIC_*` name. Requests are limited to bounded source excerpts and available dependency manifests. Context size, excerpts, output tokens, timeout, and retries are bounded. Selected credential assignments, bearer tokens, URL credentials, private-key blocks, and sensitive file paths receive best-effort redaction/exclusion; this is not a general secret-scanning guarantee.
 
-Groq output is accepted only as a strict structured explanation. Incomplete analysis or evidence forces `INSUFFICIENT_EVIDENCE`; provider/configuration errors are stored as safe statuses and do not change deterministic analysis status. The result is associated with its occurrence and evidence snapshot and is idempotently reused on replay. Finding-detail readback exposes validated structured fields, not prompt/context or provider error text. See [ADR-007](adr/ADR-007-ai-boundary.md).
+AI output is accepted only as strict structured data, and citations are checked against submitted files and valid line bounds. Dependency estimates require a supplied dependency manifest. Invalid or absent output does not become a finding or numeric score; completed deterministic results remain available. Frontend responses omit AI provider and model details. See [ADR-007](adr/ADR-007-ai-boundary.md).
 
 ## Implemented rule
 

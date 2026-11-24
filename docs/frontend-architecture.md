@@ -22,7 +22,7 @@ The frontend is the presentation layer for the product architecture. It is expec
 
 ## Implementation boundary
 
-This frontend sits above the contracts and analysis architecture defined in `docs/SYSTEM_DESIGN.md`, `docs/DATABASE_DESIGN.md`, and `packages/contracts/`. It is intentionally decoupled from storage semantics and analysis logic.
+This frontend sits above the contracts and analysis architecture defined in `docs/SYSTEM_DESIGN.md`, `docs/DATABASE_DESIGN.md`, and `shared/contracts/`. It is intentionally decoupled from storage semantics and analysis logic.
 
 ## Current state
 
